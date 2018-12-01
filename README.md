@@ -8,4 +8,4 @@ classical networks with gluon
 * [x] VGG   
 * [x] NiN    
 * [x] GoogleLenet   
-* []resnet   
+* [ ]resnet   
