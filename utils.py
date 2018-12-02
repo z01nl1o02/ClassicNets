@@ -41,6 +41,8 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             train_loss += loss.mean().asscalar()
             trainer.step(batch_size)
             cls_acc.update(Y,out)
+
+            nd.waitall()
         print("epoch {} lr {}".format(epoch,trainer.learning_rate))
         print("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
         acc = test_net(net, valid_iter, ctx)

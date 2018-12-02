@@ -2,7 +2,7 @@ import mxnet as mx
 from mxnet.gluon import Trainer
 from mxnet import lr_scheduler
 from datasets import fasionmnist
-from networks import alexnet,vgg,nin,googlelenet
+from networks import alexnet,vgg,nin,googlelenet,resnet,densenet
 from utils import train_net
 import os
 
@@ -12,7 +12,7 @@ num_epochs = 50
 base_lr = 0.01
 wd = 0.0005
 resize=(224,224)
-net_name = "googlelenet"
+net_name = "densenet"
 output_folder = os.path.join("output")
 output_prefix = os.path.join(output_folder,net_name+"_")
 
@@ -34,7 +34,14 @@ elif net_name == "googlelenet":
     net = googlelenet.load(len(class_names))
     base_lr = 0.1
     resize=(96,96)
-
+elif net_name == "resnet-18":
+    net = resnet.load('resnet-18',len(class_names))
+    base_lr = 0.05
+    resize=(96,96)
+elif net_name == "densenet":
+    net = densenet.load(len(class_names))
+    base_lr = 0.1
+    resize=(96,96)
 
 
 train_iter,test_iter, num_train = fasionmnist.load(batch_size,resize=resize)
