@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import mxnet as mx
 from mxnet import gluon,nd,autograd
 import numpy as np
@@ -55,3 +56,90 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
 
 
 
+
+###########################################################
+##rnn
+def predict_rnn_gluon(prefix, num_chars, model, vocab_size, ctx, idx_to_char, char_to_idx):
+    state = model.begin_state(batch_size=1, ctx=ctx)
+    output = [char_to_idx[prefix[0]]]
+    for t in range(num_chars + len(prefix) - 1):
+        X = nd.array([output[-1]], ctx=ctx).reshape((1,1))
+        (Y,state) = model(X,state)
+        if t < len(prefix) - 1:
+            output.append(char_to_idx[prefix[t+1]])
+        else:
+            output.append(int(Y.argmax(axis=1).asscalar()))
+    return ''.join([idx_to_char[i] for i in output])
+
+import time
+import math
+
+def grad_clipping(params, theta, ctx):
+    norm = nd.array([0.0],ctx)
+    for param in params:
+        norm += (param.grad ** 2).sum()
+    norm = norm.sqrt().asscalar()
+    if norm > theta:
+        for param in params:
+            param.grad[:] *= theta / norm
+    return
+
+
+def train_and_predict_rnn_gluon(model,
+                                dataset,
+                                trainer,
+                                loss,
+                                ctx,
+                                data_iter_func,
+                                data_iter_func_type, #random/consecutive
+                                num_epochs, num_steps,
+                                clipping_theta,
+                                batch_size,
+                                pred_period,
+                                pred_len,
+                                prefixes):
+   # loss = gluon.loss.SoftmaxCrossEntropyLoss()
+   # model.initialize(ctx=ctx, force_reinit=True, init=mx.init.Normal(0.01))
+   # trainer = gluon.Trainer(model.collect_params(), "sgd",{'learning_rate':lr, "momentum":0, "wd":0})
+    for epoch in range(num_epochs):
+        loss_sum, start = 0.0, time.time()
+        if data_iter_func_type != "random":
+            state = model.begin_state(batch_size=batch_size,ctx=ctx)
+        data_iter = data_iter_func(dataset.corpus_indices, batch_size, num_steps, ctx)
+        for t,(X,Y) in enumerate(data_iter):
+            if data_iter_func_type == "random":
+                state = model.begin_state(batch_size=batch_size,ctx=ctx)
+            else:
+                for s in state:
+                    s.detach()
+            #?? hidden is not adjusted during training???
+            with autograd.record():
+                (output,state) = model(X,state)
+                y = Y.T.reshape((-1,))
+                l = loss(output,y).mean()
+            l.backward()
+            #grad clip
+            params = [p.data() for p in model.collect_params().values()]
+            grad_clipping(params, clipping_theta, ctx)
+            trainer.step(1) #loss is mean so here step = 1
+            loss_sum += l.asscalar()
+        if (epoch + 1) % pred_period == 0:
+            print('epoch %d, perplexity %f, time %.2f sec' %(
+                epoch + 1, math.exp(loss_sum / (t+1)), time.time() - start
+            ))
+            for prefix in prefixes:
+                print(' -' + predict_rnn_gluon(
+                    prefix, pred_len, model, dataset.vocab_size, ctx, dataset.idx_to_char, dataset.char_to_idx
+
+                ))
+
+
+if 0:
+    from datasets.jaychou_lyrics import JAYCHOU_LYRICS
+    from networks.rnn import RNNModel
+    ctx = mx.gpu()
+    lyrics = JAYCHOU_LYRICS(dev_root='datasets/')
+    model = RNNModel(lyrics.vocab_size)
+    model.initialize(force_reinit=True,ctx=ctx)
+    output =  predict_rnn_gluon("分开".decode('utf-8'),10, model, lyrics.vocab_size, ctx, lyrics.idx_to_char, lyrics.char_to_idx)
+    print output
