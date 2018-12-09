@@ -10,3 +10,4 @@ classical networks with gluon
 * [x] GoogleLenet   
 * [x] resnet   
 * [x] densenet
+* [x] rnn
