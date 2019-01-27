@@ -2,23 +2,34 @@
 import mxnet as mx
 from mxnet import gluon,nd,autograd
 import numpy as np
+import cv2
 
 
+def show_fcn_mask(ind,Y,out):
+    groundtruth = (Y[0,0]).asnumpy() * 255
+    out = out[0].asnumpy()
+    out = (out[1] > out[0]) * 255
+    #print out.shape
+    cv2.imwrite("{}_groundtruth.jpg".format(ind),np.uint8(groundtruth))
+    cv2.imwrite("{}_test.jpg".format(ind),np.uint8(out))
+    #cv2.waitKey(-1)
 
 def test_fcn(net, valid_iter, ctx):
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
     cls_acc = mx.metric.Accuracy(name="test acc")
     loss_sum = 0
-    for batch in valid_iter:
+    for ind,batch in enumerate(valid_iter):
         X,Y = batch
         out = X.as_in_context(ctx)
 #        for layer in net:
 #            out = layer(out)
         out = net(out)
         out = out.as_in_context(mx.cpu())
+        #print Y.shape, out.shape
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
         loss_sum += loss.mean().asscalar()
+        show_fcn_mask(ind,Y,out)
     print("\ttest loss {} {}".format(loss_sum/len(valid_iter),cls_acc.get()))
     return cls_acc.get_name_value()[0][1]
 
@@ -29,10 +40,11 @@ def train_fcn(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
     top_acc = 0
     iter_num = 0
     for epoch in range(num_epochs):
-        trainer.set_learning_rate(lr_sch(iter_num))
+        #trainer.set_learning_rate(lr_sch(iter_num))
         train_loss, train_acc = 0, 0
         for batch in train_iter:
             iter_num += 1
+            trainer.set_learning_rate(lr_sch(iter_num))
             X,Y = batch
             out = X.as_in_context(ctx)
             #print out.shape
