@@ -93,5 +93,5 @@ def load(batch_size):
     trainset = THREAD(fortrain=True)
     testset = THREAD(fortrain=False)
     train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover")
-    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=True,last_batch="rollover")
+    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
     return train_iter, test_iter, len(trainset)
