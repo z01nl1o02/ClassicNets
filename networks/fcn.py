@@ -34,7 +34,7 @@ class FCN(gluon.Block):
 
         self.uplayer_2 = gluon.nn.Sequential()
         self.uplayer_2.add(
-            gluon.nn.Conv2D(channels=96,kernel_size=3,strides=1,padding=1,activation="relu"),
+            gluon.nn.Conv2D(channels=64,kernel_size=3,strides=1,padding=1,activation="relu"),
             gluon.nn.Conv2D(channels=64,kernel_size=3,strides=1,padding=1,activation="relu")
         )
         self.uplayer_2.initialize(init=mx.initializer.Xavier())
@@ -71,12 +71,14 @@ class FCN(gluon.Block):
         #print 'forward 2', out.shape
         out = mx.nd.contrib.BilinearResize2D(out,height=H*4,width=W*4)
         out = self.uplayer_8(out)
-        out = out + d8
+        #out = out + d8
+        out = mx.nd.concat(out,d8,dim=1)
         _,_,H,W = out.shape
         
         out = mx.nd.contrib.BilinearResize2D(out,height=H*4,width=W*4)
         out = self.uplayer_2(out)
-        out = out  + d2
+        #out = out  + d2
+        out = mx.nd.concat(out,d2,dim=1)
         _,_,H,W = out.shape
         out = mx.nd.contrib.BilinearResize2D(out,height=H*2,width=W*2)
         out = self.uplayer_1(out)
