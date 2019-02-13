@@ -3,18 +3,18 @@ import mxnet as mx
 from mxnet import gluon,nd,autograd
 import numpy as np
 import cv2
+from mxnet import lr_scheduler
 
-
-def show_fcn_mask(ind,Y,out):
-    groundtruth = (Y[0,0]).asnumpy() * 255
+def show_seg_mask(ind,Y,out):
+    groundtruth = (Y[0,0]).asnumpy() * 10
     out = out[0].asnumpy()
-    out = (out[1] > out[0]) * 255
+    out = np.argmax(out,axis=0) * 10
     #print out.shape
     cv2.imwrite("{}_groundtruth.jpg".format(ind),np.uint8(groundtruth))
     cv2.imwrite("{}_test.jpg".format(ind),np.uint8(out))
     #cv2.waitKey(-1)
 
-def test_fcn(net, valid_iter, ctx):
+def test_seg(net, valid_iter, ctx):
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
     cls_acc = mx.metric.Accuracy(name="test acc")
     loss_sum = 0
@@ -29,12 +29,12 @@ def test_fcn(net, valid_iter, ctx):
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
         loss_sum += loss.mean().asscalar()
-        show_fcn_mask(ind,Y,out)
+        #show_seg_mask(ind,Y,out)
     print("\ttest loss {} {}".format(loss_sum/len(valid_iter),cls_acc.get()))
     return cls_acc.get_name_value()[0][1]
 
 
-def train_fcn(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
+def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
     cls_acc = mx.metric.Accuracy(name="train acc")
     top_acc = 0
@@ -62,7 +62,7 @@ def train_fcn(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             nd.waitall()
         print("epoch {} lr {}".format(epoch,trainer.learning_rate))
         print("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
-        acc = test_fcn(net, valid_iter, ctx)
+        acc = test_seg(net, valid_iter, ctx)
         if top_acc < acc:
             print('\ttop valid acc {}'.format(acc))
             top_acc = acc
@@ -203,6 +203,19 @@ def train_and_predict_rnn_gluon(model,
 
                 ))
 
+
+
+class CycleScheduler(lr_scheduler.LRScheduler):
+    def __init__(self,updates_one_cycle, min_lr, max_lr):
+        super(CycleScheduler,self).__init__()
+        self.updates_one_cycle = np.float32(updates_one_cycle)
+        self.min_lr = min_lr
+        self.max_lr = max_lr
+        return
+    def __call__(self,update):
+        update = update % self.updates_one_cycle
+        lr = self.min_lr + (self.max_lr - self.max_lr) * update / self.updates_one_cycle
+        return lr
 
 if 0:
     from datasets.jaychou_lyrics import JAYCHOU_LYRICS
