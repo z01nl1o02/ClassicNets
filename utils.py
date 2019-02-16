@@ -67,7 +67,7 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
         print("epoch {} lr {}".format(epoch,trainer.learning_rate))
         print("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
         acc = test_seg(net, valid_iter, ctx, cls_loss = cls_loss)
-        if 0 == (iter_num % 1000):
+        if 0 == (epoch % 5):
             net_path = '{}last_model.params'.format(save_prefix)
             net.save_parameters(net_path)
 
