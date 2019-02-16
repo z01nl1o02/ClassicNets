@@ -2,20 +2,25 @@
 import mxnet as mx
 from mxnet import gluon,nd,autograd
 import numpy as np
-import cv2
+import cv2,os
 from mxnet import lr_scheduler
 
-def show_seg_mask(ind,Y,out):
-    groundtruth = (Y[0,0]).asnumpy() * 10
-    out = out[0].asnumpy()
-    out = np.argmax(out,axis=0) * 10
-    #print out.shape
-    cv2.imwrite("{}_groundtruth.jpg".format(ind),np.uint8(groundtruth))
-    cv2.imwrite("{}_test.jpg".format(ind),np.uint8(out))
-    #cv2.waitKey(-1)
+def show_seg_mask(net,ind,Y,out):
+    if os.path.exists("debug"):
+        groundtruth = (Y[0]).asnumpy() * 10
+        out = out[0].asnumpy()
+        out = np.argmax(out,axis=0) * 10
+        cv2.imwrite("debug/{}_groundtruth.jpg".format(ind),np.uint8(groundtruth))
+        cv2.imwrite("debug/{}_test.jpg".format(ind),np.uint8(out))
+        if 0:
+            for name in net.collect_params('.*weight'):
+                w = net.collect_params()[name]
+                print name, w.data().asnumpy().mean(), w.data().asnumpy().std()
 
-def test_seg(net, valid_iter, ctx):
-    cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
+
+def test_seg(net, valid_iter, ctx, cls_loss = None):
+    if cls_loss is None:
+        cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
     cls_acc = mx.metric.Accuracy(name="test acc")
     loss_sum = 0
     for ind,batch in enumerate(valid_iter):
@@ -23,19 +28,21 @@ def test_seg(net, valid_iter, ctx):
         out = X.as_in_context(ctx)
 #        for layer in net:
 #            out = layer(out)
-        out = net(out)
+        with autograd.predict_mode():
+            out = net(out)
         out = out.as_in_context(mx.cpu())
-        #print Y.shape, out.shape
+       # print Y.shape, out.shape
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
         loss_sum += loss.mean().asscalar()
-        #show_seg_mask(ind,Y,out)
+        show_seg_mask(net,ind,Y,out)
     print("\ttest loss {} {}".format(loss_sum/len(valid_iter),cls_acc.get()))
     return cls_acc.get_name_value()[0][1]
 
 
-def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
-    cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
+def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, cls_loss = None, save_prefix = "./"):
+    if cls_loss is None:
+        cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
     cls_acc = mx.metric.Accuracy(name="train acc")
     top_acc = 0
     iter_num = 0
@@ -47,22 +54,19 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             trainer.set_learning_rate(lr_sch(iter_num))
             X,Y = batch
             out = X.as_in_context(ctx)
-            #print out.shape
             with autograd.record(True):
-#                for layer in net:
-#                    out = layer(out)
                 out = net(out)
                 out = out.as_in_context(mx.cpu())
                 loss = cls_loss(out, Y)
             loss.backward()
+            nd.waitall()
+            #print loss
             train_loss += loss.mean().asscalar()
             trainer.step(batch_size)
             cls_acc.update(Y,out)
-
-            nd.waitall()
         print("epoch {} lr {}".format(epoch,trainer.learning_rate))
         print("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
-        acc = test_seg(net, valid_iter, ctx)
+        acc = test_seg(net, valid_iter, ctx, cls_loss = cls_loss)
         if top_acc < acc:
             print('\ttop valid acc {}'.format(acc))
             top_acc = acc
@@ -96,10 +100,10 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
     top_acc = 0
     iter_num = 0
     for epoch in range(num_epochs):
-        trainer.set_learning_rate(lr_sch(iter_num))
         train_loss, train_acc = 0, 0
         for batch in train_iter:
             iter_num += 1
+            trainer.set_learning_rate(lr_sch(iter_num))
             X,Y = batch
             out = X.as_in_context(ctx)
             with autograd.record(True):
@@ -214,8 +218,38 @@ class CycleScheduler(lr_scheduler.LRScheduler):
         return
     def __call__(self,update):
         update = update % self.updates_one_cycle
-        lr = self.min_lr + (self.max_lr - self.max_lr) * update / self.updates_one_cycle
+        lr = self.min_lr + (self.max_lr - self.min_lr) * update / self.updates_one_cycle
         return lr
+
+
+
+class FocusLoss(mx.gluon.loss.Loss):
+    #copy from mx.gluon.loss.softmaxloss
+    def __init__(self, alpha = 1.0, gamma=1.0, axis=-1, sparse_label=True, from_logits=False,
+                 batch_axis=0, **kwargs):
+        super(FocusLoss, self).__init__(None, batch_axis, **kwargs)
+        self._axis = axis
+        self._gamma = gamma
+        self._alpha = alpha
+        self._sparse_label = sparse_label
+        self._from_logits = from_logits
+
+    def hybrid_forward(self, F, pred, label):
+        if not self._from_logits:
+            pred = F.softmax(pred,self._axis)
+            adjW = self._alpha * ((1-pred)**self._gamma) #focus loss
+            pred = adjW * F.log(pred)
+        else:
+            return 0
+        if self._sparse_label:
+            loss = -F.pick(pred, label, axis=self._axis, keepdims=True)
+        else:
+            label = mx.gluon.loss.reshape_like(F, label, pred)
+            loss = -F.sum(pred*label, axis=self._axis, keepdims=True)
+        loss = mx.gluon.loss._apply_weighting(F, loss, self._weight, None)
+        loss = F.mean(loss, axis=self._batch_axis, exclude=True)
+#        print 'focus loss: ',loss
+        return loss
 
 if 0:
     from datasets.jaychou_lyrics import JAYCHOU_LYRICS
