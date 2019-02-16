@@ -67,10 +67,15 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
         print("epoch {} lr {}".format(epoch,trainer.learning_rate))
         print("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
         acc = test_seg(net, valid_iter, ctx, cls_loss = cls_loss)
+        if 0 == (iter_num % 1000):
+            net_path = '{}last_model.params'.format(save_prefix)
+            net.save_parameters(net_path)
+
+
         if top_acc < acc:
             print('\ttop valid acc {}'.format(acc))
             top_acc = acc
-            net_path = '{}top_acc_{}_{:.3f}.params'.format(save_prefix,epoch,top_acc)
+            net_path = '{}top_acc_{}_{:.5f}.params'.format(save_prefix,epoch,top_acc)
             net.save_parameters(net_path)
             
 
@@ -250,6 +255,31 @@ class FocusLoss(mx.gluon.loss.Loss):
         loss = F.mean(loss, axis=self._batch_axis, exclude=True)
 #        print 'focus loss: ',loss
         return loss
+
+
+class SpatialDropout2D(mx.gluon.Block):
+    def __init__(self, p):
+        super(SpatialDropout2D, self).__init__()
+        self.p = p
+
+    def forward(self, x):
+        if not autograd.is_training():
+            return x
+        mask_shape = x.shape[:2] + (1, 1)
+        mask = nd.random.multinomial(nd.array([self.p, 1 - self.p],ctx = x.context),
+                                     shape=mask_shape).astype('float32')
+        return (x * mask) / (1 - self.p)
+
+
+if 0:
+    x = nd.ones((1, 10, 3, 3))
+    x.attach_grad()
+    net = SpatialDropout2D(0.5)
+    with autograd.record():
+        out = net(x)
+    out.backward()
+    print x
+    print x.grad
 
 if 0:
     from datasets.jaychou_lyrics import JAYCHOU_LYRICS
