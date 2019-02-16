@@ -17,6 +17,7 @@ class ENET_CONV(gluon.Block):
             return self.prelu(self.bn(self.conv(x)))
         B,C,H,W = x.shape
         out = mx.nd.contrib.BilinearResize2D(x, height=H * 2, width=W * 2)
+        #print 'up:',x.shape, out.shape
         return self.prelu(self.bn(out))
 
 class ENET_INIT(gluon.nn.Block):
@@ -35,28 +36,37 @@ class ENET_BOTTLENECK(gluon.nn.Block):
     def __init__(self,channels,downsampling=False,conv_type="regular",kernel_size=(3,3)):
         super(ENET_BOTTLENECK,self).__init__()
         self.downsampling = downsampling
-        strides = 1
         if downsampling:
-            strides = 2
-        self.b1 = gluon.nn.Sequential()
-        self.b1.add(
-            ENET_CONV("regular",channels=channels//2,kernel_size=(1,1),strides=1),
-            ENET_CONV(conv_type,channels=channels//2,kernel_size=kernel_size,strides=strides,padding=kernel_size//2),
-            ENET_CONV("regular",channels=channels,kernel_size=(1,1),strides=1)
-        )
-        #todos spatial dropout
-        if downsampling:
+            self.b1 = gluon.nn.Sequential()
+            self.b1.add(
+                ENET_CONV("regular",channels=channels,kernel_size=(2,2),strides=2),
+                ENET_CONV(conv_type,channels=channels,kernel_size=kernel_size,strides=1,padding=kernel_size//2),
+                ENET_CONV("regular",channels=channels,kernel_size=(1,1),strides=1)
+            )
+            #todos spatial dropout
             self.b2 = gluon.nn.Sequential()
             self.b2.add(
-                gluon.nn.MaxPool2D(pool_size=(2,2), strides=strides,padding=0)
+                gluon.nn.MaxPool2D(pool_size=(2,2), strides=2,padding=0)
             )
+            self.conv = gluon.nn.Conv2D(channels=channels,kernel_size=1,strides=1,padding=0)
             self.prelu = gluon.nn.PReLU()
+        else:
+            self.b1 = gluon.nn.Sequential()
+            self.b1.add(
+                ENET_CONV("regular",channels=channels,kernel_size=(1,1),strides=1),
+                ENET_CONV(conv_type,channels=channels,kernel_size=kernel_size,strides=1,padding=kernel_size/2),
+                ENET_CONV("regular",channels=channels,kernel_size=(1,1),strides=1)
+            )
+
+
         return
     def forward(self,x):
         x1 = self.b1(x)
+        #print 'norm:',x.shape, x1.shape
         if self.downsampling:
             x2 = self.b2(x)
-            return self.prelu( mx.nd.concat(x1,x2,dim=1) )
+            #print 'down:',x.shape, x1.shape, x2.shape
+            return self.prelu( self.conv( mx.nd.concat(x1,x2,dim=1) ) )
         return x1
 
 
@@ -122,9 +132,13 @@ def get_net(num_class):
 if 0:
     ctx = mx.gpu()
     net = ENET(2)
+    for name in net.collect_params('.*weight'):
+        print name,net.collect_params()[name].shape
+        #print name, param.shape
     net.collect_params().reset_ctx(ctx)
     x = mx.nd.random.uniform(0, 1, (2, 3, 512, 512), ctx=ctx)
     print 'input: ', x.shape
-    y = net(x)
+    y = net(x).asnumpy()
+    print y.shape, y.min(), y.max()
     print 'output: ', y.shape
 
