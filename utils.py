@@ -257,6 +257,41 @@ class FocusLoss(mx.gluon.loss.Loss):
         return loss
 
 
+
+class WeightCELoss(mx.gluon.loss.Loss):
+    #copy from mx.gluon.loss.softmaxloss
+    def __init__(self, weight_classes, axis=-1, sparse_label=True, from_logits=False,
+                 batch_axis=0, **kwargs):
+        super(WeightCELoss, self).__init__(None, batch_axis, **kwargs)
+        self._axis = axis
+        self._weight_classes = weight_classes
+        self._sparse_label = sparse_label
+        self._from_logits = from_logits
+
+    def hybrid_forward(self, F, pred, label):
+        if not self._from_logits:
+            pred = F.softmax(pred,self._axis)
+            pred = F.log(pred)
+        else:
+            return 0
+        if self._sparse_label:
+            loss = -F.pick(pred, label, axis=self._axis, keepdims=True)
+        else:
+            label = mx.gluon.loss.reshape_like(F, label, pred)
+            loss = -F.sum(pred*label, axis=self._axis, keepdims=True)
+
+        sample_weight = None
+        if self._weight_classes:
+            label_cpu = label.asnumpy()
+            class_weight = np.asarray(self._weight_classes)
+            sample_weight = np.choose(label_cpu,class_weight)
+            sample_weight = nd.array(sample_weight)
+        loss = mx.gluon.loss._apply_weighting(F, loss, self._weight, sample_weight=sample_weight)
+        loss = F.mean(loss, axis=self._batch_axis, exclude=True)
+#        print 'focus loss: ',loss
+        return loss
+
+
 class SpatialDropout2D(mx.gluon.Block):
     def __init__(self, p):
         super(SpatialDropout2D, self).__init__()
