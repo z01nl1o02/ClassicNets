@@ -55,6 +55,8 @@ class DatasetVOC(gluon.data.Dataset):
                 line = line.strip()
                 if line == "":
                     continue
+                #if len(self.data_pairs) >= 200:
+                #    break
                 image_path = os.path.join(voc_sdk_root,"JPEGImages/{}.jpg".format(line))
                 label_path = os.path.join(voc_sdk_root,"SegmentationClass/{}.png".format(line))
                 self.data_pairs.append((image_path,label_path))
@@ -81,28 +83,32 @@ class DatasetVOC(gluon.data.Dataset):
         h,w = self.hw_crop
         H,W,_ = image.shape
 
-        if not self.fortrain:
+        if 1: #no augments
             image = image[0:h,0:w,:]
             label = label[0:h,0:w]
         else:
-            #crop
-            dx = random.randint(0,W - w)
-            dy = random.randint(0,H - h)
-            image = image[dy:dy+h, dx:dx+w, :]
-            label = label[dy:dy+h, dx:dx+w]
+            if not self.fortrain:
+                image = image[0:h,0:w,:]
+                label = label[0:h,0:w]
+            else:
+                #crop
+                dx = random.randint(0,W - w)
+                dy = random.randint(0,H - h)
+                image = image[dy:dy+h, dx:dx+w, :]
+                label = label[dy:dy+h, dx:dx+w]
 
-            #rotation
-            H,W,_ = image.shape
-            deg = random.randint(-20,20)
-            H,W,C = image.shape
-            center = (H//2, W//2)
-            M = cv2.getRotationMatrix2D(center,deg,1.0)
-            image = cv2.warpAffine(image,M,(W,H),flags=cv2.INTER_LINEAR)
-            label = cv2.warpAffine(label,M,(W,H),flags=cv2.INTER_NEAREST)
-            #smooth
-            sigma = random.randint(0,100) / 50.0
-            if sigma >= 0.5:
-                image = cv2.GaussianBlur(image,(5,5),sigma)
+                #rotation
+                H,W,_ = image.shape
+                deg = random.randint(-20,20)
+                H,W,C = image.shape
+                center = (H//2, W//2)
+                M = cv2.getRotationMatrix2D(center,deg,1.0)
+                image = cv2.warpAffine(image,M,(W,H),flags=cv2.INTER_LINEAR)
+                label = cv2.warpAffine(label,M,(W,H),flags=cv2.INTER_NEAREST)
+                #smooth
+                sigma = random.randint(0,100) / 50.0
+                if sigma >= 0.5:
+                    image = cv2.GaussianBlur(image,(5,5),sigma)
 
 
         image = np.float32(image) / 255.0
@@ -116,8 +122,8 @@ def get_class_names():
     return [k for k in range(21)]
 
 def load(batch_size):
-    trainset = DatasetVOC(voc_sdk_root=os.path.join(os.environ['HOME'],"data/VOCdevkit/VOC2007/"),fortrain=True)
-    testset = DatasetVOC(voc_sdk_root=os.path.join(os.environ['HOME'],"data/VOCdevkit/VOC2007/"),fortrain=False)
+    trainset = DatasetVOC(voc_sdk_root=os.path.join("E:/dataset/","VOCdevkit/VOC2007/"),fortrain=True)
+    testset = DatasetVOC(voc_sdk_root=os.path.join("E:/dataset/","VOCdevkit/VOC2007/"),fortrain=False)
     train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover")
     test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
     return train_iter, test_iter, len(trainset)
