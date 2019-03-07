@@ -116,18 +116,23 @@ class ENET(gluon.Block):
             ENET_BOTTLENECK(128,downsampling=False,kernel_size=5,conv_type="asymmetric"),
             ENET_BOTTLENECK(128,downsampling=False,kernel_size=3,conv_type="dilated",dilation=16), #16
 
-            
-            # decode
-            if scale <= 4:
-                ENET_BOTTLENECK(64,kernel_size=3,conv_type="upsampling"),
-                ENET_BOTTLENECK(64,kernel_size=3),
-                ENET_BOTTLENECK(64,kernel_size=3),
+            )
+           
+        # decode
+        if scale <= 4:
+            self.stages.add(
+            ENET_BOTTLENECK(64,kernel_size=3,conv_type="upsampling"),
+            ENET_BOTTLENECK(64,kernel_size=3),
+            ENET_BOTTLENECK(64,kernel_size=3)
+            )
 
-            if scale <= 2:
-                ENET_BOTTLENECK(64,kernel_size=3,conv_type="upsampling"),
-                ENET_BOTTLENECK(64,kernel_size=3),
-                ENET_BOTTLENECK(64,kernel_size=3),
-        )
+        if scale <= 2:
+            self.stages.add(
+            ENET_BOTTLENECK(64,kernel_size=3,conv_type="upsampling"),
+            ENET_BOTTLENECK(64,kernel_size=3),
+            ENET_BOTTLENECK(64,kernel_size=3)
+            )
+    
         self.lastConv = gluon.nn.Sequential(prefix = "256x")
         self.lastConv.add( gluon.nn.Conv2D(num_class,3,strides=1,padding=1,use_bias=False) )
 
