@@ -2,7 +2,7 @@
 import mxnet as mx
 from mxnet import gluon,nd,autograd
 import numpy as np
-import cv2,os
+import cv2,os,pdb
 from mxnet import lr_scheduler
 
 def show_seg_mask(net,ind,Y,out):
@@ -15,10 +15,10 @@ def show_seg_mask(net,ind,Y,out):
         if 0:
             for name in net.collect_params('.*weight'):
                 w = net.collect_params()[name]
-                print name, w.data().asnumpy().mean(), w.data().asnumpy().std()
+                print(name, w.data().asnumpy().mean(), w.data().asnumpy().std())
 
 
-def test_seg(net, valid_iter, ctx, cls_loss = None):
+def test_seg(net, valid_iter, ctx, debug_show, cls_loss = None):
     if cls_loss is None:
         cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
     cls_acc = mx.metric.Accuracy(name="test acc")
@@ -28,14 +28,16 @@ def test_seg(net, valid_iter, ctx, cls_loss = None):
         out = X.as_in_context(ctx)
 #        for layer in net:
 #            out = layer(out)
-        with autograd.predict_mode():
-            out = net(out)
+        #with autograd.predict_mode():
+        out = net(out)
         out = out.as_in_context(mx.cpu())
        # print Y.shape, out.shape
+       # pdb.set_trace()
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
         loss_sum += loss.mean().asscalar()
-        show_seg_mask(net,ind,Y,out)
+        if debug_show:
+            show_seg_mask(net,ind,Y,out)
     print("\ttest loss {} {}".format(loss_sum/len(valid_iter),cls_acc.get()))
     return cls_acc.get_name_value()[0][1]
 
@@ -46,6 +48,7 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
     cls_acc = mx.metric.Accuracy(name="train acc")
     top_acc = 0
     iter_num = 0
+   
     for epoch in range(num_epochs):
         #trainer.set_learning_rate(lr_sch(iter_num))
         train_loss, train_acc = 0, 0
@@ -57,6 +60,7 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             with autograd.record(True):
                 out = net(out)
                 out = out.as_in_context(mx.cpu())
+                #print(out.shape,Y.shape)
                 loss = cls_loss(out, Y)
             loss.backward()
             nd.waitall()
@@ -66,17 +70,16 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             cls_acc.update(Y,out)
         print("epoch {} lr {}".format(epoch,trainer.learning_rate))
         print("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
-        acc = test_seg(net, valid_iter, ctx, cls_loss = cls_loss)
-        if 0 == (epoch % 5):
+        
+        if (epoch % 10) == 0:    
+            acc = test_seg(net, valid_iter, ctx, debug_show = True, cls_loss = cls_loss)
             net_path = '{}last_model.params'.format(save_prefix)
             net.save_parameters(net_path)
-
-
-        if top_acc < acc:
-            print('\ttop valid acc {}'.format(acc))
-            top_acc = acc
-            net_path = '{}top_acc_{}_{:.5f}.params'.format(save_prefix,epoch,top_acc)
-            net.save_parameters(net_path)
+            if top_acc < acc:
+                print('\ttop valid acc {}'.format(acc))
+                top_acc = acc
+                net_path = '{}top_acc_{}_{:.5f}.params'.format(save_prefix,epoch,top_acc)
+                net.save_parameters(net_path)
             
 
 
@@ -115,6 +118,7 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
                 for layer in net:
                     out = layer(out)
                 out = out.as_in_context(mx.cpu())
+               
                 loss = cls_loss(out, Y)
             loss.backward()
             train_loss += loss.mean().asscalar()
@@ -286,6 +290,8 @@ class WeightCELoss(mx.gluon.loss.Loss):
             class_weight = np.asarray(self._weight_classes)
             sample_weight = np.choose(label_cpu,class_weight)
             sample_weight = nd.array(sample_weight)
+            if (np.isnan(sample_weight.asnumpy()).sum() > 0):
+                print("nan sample_weight")
         loss = mx.gluon.loss._apply_weighting(F, loss, self._weight, sample_weight=sample_weight)
         loss = F.mean(loss, axis=self._batch_axis, exclude=True)
 #        print 'focus loss: ',loss
@@ -313,8 +319,8 @@ if 0:
     with autograd.record():
         out = net(x)
     out.backward()
-    print x
-    print x.grad
+    print(x)
+    print(x.grad)
 
 if 0:
     from datasets.jaychou_lyrics import JAYCHOU_LYRICS
@@ -324,4 +330,4 @@ if 0:
     model = RNNModel(lyrics.vocab_size)
     model.initialize(force_reinit=True,ctx=ctx)
     output =  predict_rnn_gluon("分开".decode('utf-8'),10, model, lyrics.vocab_size, ctx, lyrics.idx_to_char, lyrics.char_to_idx)
-    print output
+    print(output)

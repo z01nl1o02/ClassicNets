@@ -40,17 +40,18 @@ def convert_from_color_segmentation(arr_3d):
 
 
 class DatasetVOC(gluon.data.Dataset):
-    def __init__(self,voc_sdk_root,fortrain, len_resize = 512, hw_crop = (512,512)):
+    def __init__(self,voc_sdk_root,fortrain, label_scale, len_resize = 512, hw_crop = (512,512)):
         super(DatasetVOC,self).__init__()
         self.data_pairs = []
         self.fortrain = fortrain
         self.len_resize = len_resize
         self.hw_crop = hw_crop
+        self.label_scale = label_scale
         if fortrain:
             list_file = "ImageSets/Segmentation/trainval.txt"
         else:
-            list_file = "ImageSets/Segmentation/test.txt"
-        with open(os.path.join(voc_sdk_root,list_file),'rb') as f:
+            list_file = "ImageSets/Segmentation/val.txt"
+        with open(os.path.join(voc_sdk_root,list_file),'r') as f:
             for line in f:
                 line = line.strip()
                 if line == "":
@@ -68,7 +69,7 @@ class DatasetVOC(gluon.data.Dataset):
     def __getitem__(self,idx):
         image = cv2.imread(self.data_pairs[idx][0],1)
         label = cv2.imread(self.data_pairs[idx][1],1)
-
+        #print(self.data_pairs[idx][0])
         H,W,C = image.shape
         if H < W:
             h = self.len_resize
@@ -76,14 +77,14 @@ class DatasetVOC(gluon.data.Dataset):
         else:
             w = self.len_resize
             h = w * H / W
-
+        w,h = int(w), int(h)
         image = cv2.resize(image,(w,h))
         label = cv2.resize(label,(w,h), interpolation=cv2.INTER_NEAREST)
 
         h,w = self.hw_crop
         H,W,_ = image.shape
-
-        if 1: #no augments
+        #print(h,w)
+        if not self.fortrain: #no augments
             image = image[0:h,0:w,:]
             label = label[0:h,0:w]
         else:
@@ -114,23 +115,71 @@ class DatasetVOC(gluon.data.Dataset):
         image = np.float32(image) / 255.0
         image = np.transpose(image,(2,0,1))
 
-        label = convert_from_color_segmentation(label).astype(np.int32)
+        label = cv2.resize(label, (w//self.label_scale, h//self.label_scale), interpolation=cv2.INTER_NEAREST) #encode only
+        label = convert_from_color_segmentation(label).astype(np.int64)
 
         return (image,label)
 
 def get_class_names():
     return [k for k in range(21)]
 
-def load(batch_size):
-    trainset = DatasetVOC(voc_sdk_root=os.path.join("E:/dataset/","VOCdevkit/VOC2007/"),fortrain=True)
-    testset = DatasetVOC(voc_sdk_root=os.path.join("E:/dataset/","VOCdevkit/VOC2007/"),fortrain=False)
+def load(batch_size,scale):
+    #trainset = DatasetVOC(voc_sdk_root=os.path.join("E:/dataset/VOC/","benchmark_RELEASE/"),fortrain=True)
+    #testset = DatasetVOC(voc_sdk_root=os.path.join("E:/dataset/VOC/","benchmark_RELEASE/"),fortrain=False)
+    trainset = DatasetVOC(voc_sdk_root=os.path.join("E:/dataset/VOCdevkit/","VOC2007/"),fortrain=True,label_scale=scale)
+    testset = DatasetVOC(voc_sdk_root=os.path.join("E:/dataset/VOCdevkit/","VOC2007/"),fortrain=False,label_scale=scale)
     train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover")
     test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
     return train_iter, test_iter, len(trainset)
 
 if 0:
     train_iter, test_iter, total = load(1)
-    print 'num of sample: ',total
+    print('num of sample: ',total) 
+    from collections import defaultdict
+    train_dict = defaultdict(int)
+    for batch in train_iter:
+        image,label = batch
+        #image = image[0].asnumpy()
+        label = label[0].asnumpy()
+        #image = (np.transpose(image,(1,2,0)) * 255).astype(np.uint8)
+        #label_uint8 = label.astype(np.uint8) * 10
+        #cv2.imshow("image",image)
+        #cv2.imshow("label",label_uint8)
+        label = list(set(label.flatten().tolist()))
+        for l in label:
+            train_dict[l] += 1
+        #print(label)
+        #cv2.waitKey(500)
+       # break
+
+    test_dict = defaultdict(int)
+    for batch in test_iter:
+        image,label = batch
+        #image = image[0].asnumpy()
+        label = label[0].asnumpy()
+        #image = (np.transpose(image,(1,2,0)) * 255).astype(np.uint8)
+        #label_uint8 = label.astype(np.uint8) * 10
+        #cv2.imshow("image",image)
+        #cv2.imshow("label",label_uint8)
+        label = list(set(label.flatten().tolist()))
+        for l in label:
+            test_dict[l] += 1
+        #print(label)
+        #cv2.waitKey(500)
+       # break
+       
+    sorted_train = sorted(train_dict.items(), key = lambda x: x[0])
+    sorted_test = sorted(test_dict.items(), key = lambda x: x[0])
+    print(sorted_train)
+    print(sorted_test)
+        
+        
+
+        
+
+if 0:
+    train_iter, test_iter, total = load(1)
+    print('num of sample: ',total) 
     for batch in train_iter:
         image,label = batch
         image = image[0].asnumpy()
