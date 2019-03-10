@@ -4,7 +4,7 @@ import os,sys
 def load(batch_size, resize = None):
     mnist_train = gdata.vision.FashionMNIST(train=True)
     mnist_test = gdata.vision.FashionMNIST(train=False)
-  #  print len(mnist_train), len(mnist_test)
+
     transformer = []
     if resize:
         transformer.append(gdata.vision.transforms.Resize(resize))
@@ -21,3 +21,9 @@ def get_class_names():
     text_labels = ['t-shirt', 'trouser', 'pullover', 'dress', 'coat',
                    'sandal', 'shirt', 'sneaker', 'bag', 'ankle boot']
     return text_labels
+
+if 0:
+    train_iter,_,_ = load(10,(32,32))
+    for batch in train_iter:
+        X,Y = batch
+        print(X.shape, Y.shape)
