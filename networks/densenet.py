@@ -60,7 +60,7 @@ def load(num_classes):
     )
     return net
 
-if 1:
+if 0:
     ctx = mx.gpu(0)
     X = nd.random.uniform(0,1,(1,3,96,96),ctx=ctx)
     net = load(10)
@@ -68,5 +68,5 @@ if 1:
     Y = X
     for blk in net:
         Y = blk(Y)
-        print '{} shape: {}'.format(blk.name, Y.shape)
+        print('{} shape: {}'.format(blk.name, Y.shape))
 

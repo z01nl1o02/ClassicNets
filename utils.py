@@ -2,7 +2,7 @@
 import mxnet as mx
 from mxnet import gluon,nd,autograd
 import numpy as np
-import cv2,os,pdb
+import cv2,os,pdb,time
 from mxnet import lr_scheduler
 
 def show_seg_mask(net,ind,Y,out):
@@ -92,14 +92,14 @@ def test_net(net, valid_iter, ctx):
     for batch in valid_iter:
         X,Y = batch
         out = X.as_in_context(ctx)
-        for layer in net:
-            out = layer(out)
+        out = net(out)
         out = out.as_in_context(mx.cpu())
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
         loss_sum += loss.mean().asscalar()
     print("\ttest loss {} {}".format(loss_sum/len(valid_iter),cls_acc.get()))
     return cls_acc.get_name_value()[0][1]
+
 
 
 def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
@@ -109,31 +109,34 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
     iter_num = 0
     for epoch in range(num_epochs):
         train_loss, train_acc = 0, 0
+        t0 = time.time()
         for batch in train_iter:
             iter_num += 1
             trainer.set_learning_rate(lr_sch(iter_num))
             X,Y = batch
             out = X.as_in_context(ctx)
             with autograd.record(True):
-                for layer in net:
-                    out = layer(out)
+                out = net(out)
                 out = out.as_in_context(mx.cpu())
-               
                 loss = cls_loss(out, Y)
             loss.backward()
             train_loss += loss.mean().asscalar()
             trainer.step(batch_size)
             cls_acc.update(Y,out)
-
             nd.waitall()
-        print("epoch {} lr {}".format(epoch,trainer.learning_rate))
+
+        print("epoch {} lr {} {}sec".format(epoch,trainer.learning_rate, time.time() - t0))
         print("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
         acc = test_net(net, valid_iter, ctx)
         if top_acc < acc:
             top_acc = acc
             print('\ttop valid acc {}'.format(acc))
-            net_path = '{}alexnet_top_acc_{}_{:.3f}.params'.format(save_prefix,epoch,top_acc)
-            net.save_parameters(net_path)
+            if isinstance(net, mx.gluon.nn.HybridSequential) or isinstance(net, mx.gluon.nn.HybridBlock):
+                pf = '{}_{:.3f}.params'.format(save_prefix,top_acc)
+                net.export(pf,epoch)
+            else:
+                net_path = '{}top_acc_{}_{:.3f}.params'.format(save_prefix,epoch,top_acc)
+                net.save_parameters(net_path)
             
 
 

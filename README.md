@@ -12,3 +12,4 @@ classical networks with gluon
 * [x] densenet
 * [x] rnn
 * [x] fcn without bn/dropout for tiny objects
+* [x] enet
