@@ -1,6 +1,8 @@
+
 import mxnet as mx
 from mxnet import gluon
 from utils import SpatialDropout2D
+from mxnet import nd
 
 
 show_log = False
@@ -83,19 +85,20 @@ class ENET_BOTTLENECK(gluon.nn.Block):
 
 
 class ENET(gluon.Block):
-    def __init__(self, num_class,scale):
+    def __init__(self, num_class,label_downscale):
         super(ENET,self).__init__()
-        self.stages = gluon.nn.Sequential()
-        self.stages.add(
-            ENET_INIT(),
-
+        self.stages_0 = gluon.nn.Sequential("0")
+        self.stages_0.add(ENET_INIT())
+        self.stages_1 = gluon.nn.Sequential("1")
+        self.stages_1.add(
             ENET_BOTTLENECK(64,downsampling=True,kernel_size=3),
             ENET_BOTTLENECK(64,downsampling=False,kernel_size=3),
             ENET_BOTTLENECK(64,downsampling=False,kernel_size=3),
             ENET_BOTTLENECK(64,downsampling=False,kernel_size=3),
-            ENET_BOTTLENECK(64,downsampling=False,kernel_size=3),
-
-
+            ENET_BOTTLENECK(64,downsampling=False,kernel_size=3)
+            )
+        self.stages_2 = gluon.nn.Sequential("2") 
+        self.stages_2.add(
             ENET_BOTTLENECK(128,downsampling=True,kernel_size=3),
 
             ENET_BOTTLENECK(128,downsampling=False,kernel_size=3),
@@ -119,36 +122,62 @@ class ENET(gluon.Block):
             )
            
         # decode
-        if scale <= 4:
-            self.stages.add(
+        if label_downscale <= 4:
+            self.stages_3 = gluon.nn.Sequential("3") 
+            self.stages_3.add(
             ENET_BOTTLENECK(64,kernel_size=3,conv_type="upsampling"),
             ENET_BOTTLENECK(64,kernel_size=3),
             ENET_BOTTLENECK(64,kernel_size=3)
             )
+            self.stages_3.initialize(init=mx.initializer.Xavier())
 
-        if scale <= 2:
-            self.stages.add(
-            ENET_BOTTLENECK(64,kernel_size=3,conv_type="upsampling"),
-            ENET_BOTTLENECK(64,kernel_size=3),
-            ENET_BOTTLENECK(64,kernel_size=3)
+        if label_downscale <= 2:
+            self.stages_4 = gluon.nn.Sequential("4") 
+            self.stages_4.add(
+            ENET_BOTTLENECK(32,kernel_size=3,conv_type="upsampling"),
+            ENET_BOTTLENECK(32,kernel_size=3),
+            ENET_BOTTLENECK(32,kernel_size=3)
             )
+            self.stages_4.initialize(init=mx.initializer.Xavier())
     
-        self.lastConv = gluon.nn.Sequential(prefix = "256x")
-        self.lastConv.add( gluon.nn.Conv2D(num_class,3,strides=1,padding=1,use_bias=False) )
+        self.lastConv4 = gluon.nn.Sequential(prefix = "scale_%d"%label_downscale) #temp layer for each scale
+        self.lastConv4.add( 
+        gluon.nn.Conv2D(32,3,strides=1,padding=1,use_bias=False), 
+        gluon.nn.Conv2D(32,3,strides=1,padding=1,use_bias=False), 
+        gluon.nn.Conv2D(32,3,strides=1,padding=1,use_bias=False), 
+        gluon.nn.Conv2D(num_class,3,strides=1,padding=1,use_bias=False) 
+        )
 
-        self.stages.initialize(init=mx.initializer.Xavier())
-        self.lastConv.initialize(init=mx.initializer.Xavier())
+        self.stages_0.initialize(init=mx.initializer.Xavier())
+        self.stages_1.initialize(init=mx.initializer.Xavier())
+        self.stages_2.initialize(init=mx.initializer.Xavier())
+        self.lastConv4.initialize(init=mx.initializer.Xavier())
+        
+        self.label_downscale = label_downscale
         return
 
     def forward(self, x):
-        out = self.stages(x)
+        out_0 = self.stages_0(x)
+        out_1 = self.stages_1(out_0)
+        out_2 = self.stages_2(out_1)
+        out = out_2
+        if self.label_downscale <= 4:
+            out_3 = self.stages_3(out_2)
+            out_3 = nd.concat(out_3,out_1,dim=1)
+            out = out_3
+            
+        if self.label_downscale <= 2:
+            out_4 = self.stages_4(out_3)
+            out_4 = nd.concat(out_4,out_0,dim=1)
+            out = out_4
+        
         _,_,H,W = out.shape
         #out = mx.nd.contrib.BilinearResize2D(out,height=H*2,width=W*2)
-        out = self.lastConv(out)
+        out = self.lastConv4(out)
         return out
 
-def get_net(num_class,scale): #scale = 8 for encode-train scale = 4 and scale = 2 for decode-train
-    return ENET(num_class,scale)
+def get_net(num_class,label_downscale): #scale = 8 for encode-train scale = 4 and scale = 2 for decode-train
+    return ENET(num_class,label_downscale)
 
     
 if 0:

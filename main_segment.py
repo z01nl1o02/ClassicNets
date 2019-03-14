@@ -9,7 +9,7 @@ import os
 
 
 ctx = mx.gpu(0)
-batch_size = 3 #32
+batch_size = 5
 num_epochs = 1000
 base_lr = 0.001 #should be small for model with pretrained model
 wd = 0.0005
@@ -35,12 +35,13 @@ elif dataset_name == 'voc':
 if net_name == "fcn":
     net = fcn.get_net(len(class_names),root='networks/')
 elif net_name == "enet":
-    
-    net = enet.get_net(len(class_names),scale=label_scale)
+    net = enet.get_net(len(class_names),label_downscale=label_scale)
 
 if load_to_train:
     net.load_parameters('output/enet.params',allow_missing=True,ignore_extra=True)
-    
+
+#for key in net.collect_params():
+#    print(key)
 
 print("train set size = ",num_train)
 
