@@ -2,21 +2,21 @@ import mxnet as mx
 from mxnet.gluon import Trainer
 from utils import CycleScheduler,FocusLoss,WeightCELoss
 from datasets import thread,segment_voc
-from networks import fcn,enet
-from utils import train_seg
+from networks import fcn,enet,unet
+from utils import train_seg,MIOU
 import os
 
 
 
 ctx = mx.gpu(0)
-batch_size = 5
+batch_size = 8
 num_epochs = 1000
 base_lr = 0.001 #should be small for model with pretrained model
 wd = 0.0005
-net_name = "enet"
+net_name = "unet"
 dataset_name = 'voc'
-label_scale = 2 #8 4 2 1     #enet train from raw to fine
-load_to_train = True
+label_scale = 1 #8 4 2 1     #enet train from raw to fine
+load_to_train = False
 output_folder = os.path.join("output")
 output_prefix = os.path.join(output_folder,net_name+"_")
 
@@ -36,9 +36,12 @@ if net_name == "fcn":
     net = fcn.get_net(len(class_names),root='networks/')
 elif net_name == "enet":
     net = enet.get_net(len(class_names),label_downscale=label_scale)
+elif net_name == "unet":
+    net = unet.get_net(len(class_names))
+    base_lr = 0.1
 
 if load_to_train:
-    net.load_parameters('output/enet.params',allow_missing=True,ignore_extra=True)
+    net.load_parameters('output/unet.params',allow_missing=True,ignore_extra=True)
 
 #for key in net.collect_params():
 #    print(key)
@@ -60,5 +63,8 @@ weight_class = [1.0 for k in range(len(class_names))]
 weight_class[0] = 0.01
 loss = WeightCELoss(axis=1, weight_classes = weight_class)
 
-train_seg(net,train_iter,test_iter,batch_size,trainer,ctx, num_epochs, lr_sch, save_prefix=output_prefix, cls_loss=loss)
+
+mIoU = MIOU(class_names)
+
+train_seg(net,train_iter,test_iter,batch_size,trainer,ctx, num_epochs, lr_sch, save_prefix=output_prefix, cls_acc = mIoU, cls_loss=loss)
 

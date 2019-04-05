@@ -5,6 +5,91 @@ import numpy as np
 import cv2,os,pdb,time
 from mxnet import lr_scheduler
 
+
+class MIOU:
+    """
+    Computes MIOU
+    Parameters
+    ----------
+    axis : int, default=1
+        The axis that represents classes
+    name : str
+        Name of this metric instance for display.
+    output_names : list of str, or None
+        Name of predictions that should be used when updating with update_dict.
+        By default include all predictions.
+    label_names : list of str, or None
+        Name of labels that should be used when updating with update_dict.
+        By default include all labels.
+    """
+    def __init__(self, class_names, axis=1, name='mIOU'):
+        self.axis = axis
+        self.n = len(class_names)
+        self.classes = class_names
+        self.name = name
+        self.hist = np.bincount([0], minlength=self.n ** 2).reshape(self.n, self.n)
+
+    def _get_hist(self,labels, preds):
+        k = (labels >= 0) & (labels < self.n)
+        return np.bincount(self.n * labels[k].astype(int) + preds[k], minlength=self.n ** 2).reshape(self.n, self.n)
+
+    def reset(self):
+        self.hist = np.bincount([0], minlength=self.n ** 2).reshape(self.n, self.n)
+        return
+
+    def get(self):
+        miou = np.diag(self.hist) * 1.0 / (self.hist.sum(1) + self.hist.sum(0) - np.diag(self.hist))
+        return (self.name, np.nanmean(miou))
+
+    def detail(self):
+        lines = []
+        miou = np.diag(self.hist) * 1.0 / (self.hist.sum(1) + self.hist.sum(0) - np.diag(self.hist))
+        for k, cls in enumerate(self.classes):
+            lines.append('({}:{:.3f})'.format(cls,miou[k]))
+        return ' '.join(lines)
+
+    def update(self, labels, preds):
+        """Updates the internal evaluation result.
+
+        Parameters
+        ----------
+        labels : list of `NDArray`
+            The labels of the data with class indices as values, one per sample.
+
+        preds : list of `NDArray`
+            Prediction values for samples. Each prediction value can either be the class index,
+            or a vector of likelihoods for all classes.
+        """
+        labels, preds = mx.metric.check_label_shapes(labels, preds, True)
+
+        for label, pred_label in zip(labels, preds):
+            if pred_label.shape != label.shape:
+                pred_label = mx.nd.argmax(pred_label, axis=self.axis)
+            pred_label = pred_label.asnumpy().astype('int32')
+            label = label.asnumpy().astype('int32')
+            # flatten before checking shapes to avoid shape miss match
+            label = label.flat
+            pred_label = pred_label.flat
+
+            mx.metric.check_label_shapes(label, pred_label)
+            self.hist += self._get_hist(label, pred_label)
+        return
+    def get_name_value(self):
+        """Returns zipped name and value pairs.
+
+        Returns
+        -------
+        list of tuples
+            A (name, value) tuple list.
+        """
+        name, value = self.get()
+        if not isinstance(name, list):
+            name = [name]
+        if not isinstance(value, list):
+            value = [value]
+        return list(zip(name, value))
+
+
 def show_seg_mask(net,ind,Y,out):
     if os.path.exists("debug"):
         groundtruth = (Y[0]).asnumpy() * 10
@@ -18,10 +103,12 @@ def show_seg_mask(net,ind,Y,out):
                 print(name, w.data().asnumpy().mean(), w.data().asnumpy().std())
 
 
-def test_seg(net, valid_iter, ctx, debug_show, cls_loss = None):
+def test_seg(net, valid_iter, ctx, debug_show, cls_acc = None, cls_loss = None):
     if cls_loss is None:
         cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
-    cls_acc = mx.metric.Accuracy(name="test acc")
+    if cls_acc is None:
+        cls_acc = mx.metric.Accuracy(name="test acc")
+    cls_acc.reset()
     loss_sum = 0
     for ind,batch in enumerate(valid_iter):
         X,Y = batch
@@ -39,18 +126,21 @@ def test_seg(net, valid_iter, ctx, debug_show, cls_loss = None):
         if debug_show:
             show_seg_mask(net,ind,Y,out)
     print("\ttest loss {} {}".format(loss_sum/len(valid_iter),cls_acc.get()))
+    print("\t\t{}".format(cls_acc.detail()))
     return cls_acc.get_name_value()[0][1]
 
 
-def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, cls_loss = None, save_prefix = "./"):
+def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, cls_acc = None, cls_loss = None, save_prefix = "./"):
     if cls_loss is None:
         cls_loss = gluon.loss.SoftmaxCrossEntropyLoss(axis=1)
-    cls_acc = mx.metric.Accuracy(name="train acc")
+    if cls_acc is None:
+        cls_acc = mx.metric.Accuracy(name="train acc")
     top_acc = 0
     iter_num = 0
    
     for epoch in range(num_epochs):
         #trainer.set_learning_rate(lr_sch(iter_num))
+        cls_acc.reset()
         train_loss, train_acc = 0, 0
         for batch in train_iter:
             iter_num += 1
@@ -72,7 +162,7 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
         print("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
         
         if (epoch % 10) == 0:    
-            acc = test_seg(net, valid_iter, ctx, debug_show = True, cls_loss = cls_loss)
+            acc = test_seg(net, valid_iter, ctx, debug_show = True, cls_acc = cls_acc,cls_loss = cls_loss)
             net_path = '{}last_model.params'.format(save_prefix)
             net.save_parameters(net_path)
             if top_acc < acc:
