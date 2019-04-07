@@ -39,18 +39,18 @@ def convert_from_color_segmentation(arr_3d):
 
 
 
-class DatasetVOC(gluon.data.Dataset):
+class DatasetVOCAug(gluon.data.Dataset):
     def __init__(self,voc_sdk_root,fortrain, label_scale, len_resize = 256, hw_crop = (256,256)):
-        super(DatasetVOC,self).__init__()
+        super(DatasetVOCAug,self).__init__()
         self.data_pairs = []
         self.fortrain = fortrain
         self.len_resize = len_resize
         self.hw_crop = hw_crop
         self.label_scale = label_scale
         if fortrain:
-            list_file = "ImageSets/Segmentation/train.txt"
+            list_file = "train.txt"
         else:
-            list_file = "ImageSets/Segmentation/val.txt"
+            list_file = "val.txt"
         with open(os.path.join(voc_sdk_root,list_file),'r') as f:
             for line in f:
                 line = line.strip()
@@ -58,7 +58,7 @@ class DatasetVOC(gluon.data.Dataset):
                     continue
                 #if len(self.data_pairs) >= 200:
                 #    break
-                image_path = os.path.join(voc_sdk_root,"JPEGImages/{}.jpg".format(line))
+                image_path = os.path.join(voc_sdk_root,"img/{}.jpg".format(line))
                 label_path = os.path.join(voc_sdk_root,"SegmentationClass/{}.png".format(line))
                 self.data_pairs.append((image_path,label_path))
         return
@@ -129,8 +129,8 @@ def load(batch_size,scale):
     root = "E:/dataset/VOCdevkit/"
     if platform.system() == "Linux":
         root = "/home/c001/data/VOCdevkit/"
-    trainset = DatasetVOC(voc_sdk_root=os.path.join(root,"VOC2007/"),fortrain=True,label_scale=scale)
-    testset = DatasetVOC(voc_sdk_root=os.path.join(root,"VOC2007/"),fortrain=False,label_scale=scale)
+    trainset = DatasetVOCAug(voc_sdk_root=os.path.join(root,"VOCaug/dataset"),fortrain=True,label_scale=scale)
+    testset = DatasetVOCAug(voc_sdk_root=os.path.join(root,"VOCaug/dataset"),fortrain=False,label_scale=scale)
     train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover")
     test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
     return train_iter, test_iter, len(trainset)
