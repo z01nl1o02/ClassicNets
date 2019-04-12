@@ -7,13 +7,14 @@ from utils import train_net,CycleScheduler
 import os
 
 ctx = mx.gpu(0)
-batch_size = 32
+batch_size = 200
 num_epochs = 50
 base_lr = 0.01
-wd = 0.0005
+wd = 0.001
 resize=None
 net_name = "alexnet"
-data_name = "classify_dataset"
+data_name = "rec"
+
 output_folder = os.path.join("output")
 output_prefix = os.path.join(output_folder,net_name)
 
@@ -24,9 +25,16 @@ if not os.path.exists(output_folder):
 if data_name == "classify_dataset":
     train_iter,test_iter, num_train = classify_dataset.load(batch_size,resize=resize)
     class_names = classify_dataset.get_class_names()
-else:
+elif data_name == "fasionmnist":
     train_iter,test_iter, num_train = fasionmnist.load(batch_size,resize=resize)
     class_names = fasionmnist.get_class_names()
+else:
+    rec_train,rec_test = "fortrain.rec", "fortest.rec"  
+    train_iter = mx.io.ImageRecordIter( path_imgrec = rec_train, data_shape = (3,65,65), batch_size = batch_size )
+    test_iter = mx.io.ImageRecordIter( path_imgrec = rec_test, data_shape = (3,65,65), batch_size = batch_size )
+    class_names = '0,1,2,3,4'.split(',')
+    num_train = 350000
+    
 
 
 

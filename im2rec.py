@@ -327,6 +327,9 @@ if __name__ == '__main__':
     # if the '--list' is used, it generates .lst file
     if args.list:
         make_list(args)
+        
+        print('done')
+        sys.exit()
     # otherwise read .lst file to generates .rec file
     else:
         if os.path.isdir(args.prefix):
@@ -391,3 +394,5 @@ if __name__ == '__main__':
                         cnt += 1
         if not count:
             print('Did not find and list file with prefix %s'%args.prefix)
+        print('done')
+        sys.exit()

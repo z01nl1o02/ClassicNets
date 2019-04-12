@@ -180,7 +180,10 @@ def test_net(net, valid_iter, ctx):
     cls_acc = mx.metric.Accuracy(name="test acc")
     loss_sum = 0
     for batch in valid_iter:
-        X,Y = batch
+        if isinstance(batch,mx.io.DataBatch):
+            X,Y = batch.data[0],batch.label[0]
+        else:
+            X,Y = batch
         out = X.as_in_context(ctx)
         out = net(out)
         out = out.as_in_context(mx.cpu())
@@ -204,7 +207,10 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
         for batch in train_iter:
             iter_num += 1
             trainer.set_learning_rate(lr_sch(iter_num))
-            X,Y = batch
+            if isinstance(batch,mx.io.DataBatch):
+                X,Y = batch.data[0],batch.label[0]
+            else:
+                X,Y = batch
             out = X.as_in_context(ctx)
             with autograd.record(True):
                 out = net(out)
@@ -212,20 +218,18 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
                 loss = cls_loss(out, Y)
             loss.backward()
             train_loss += loss.mean().asscalar()
-            sw.add_scalar(tag='cross_entropy', value=loss.mean().asscalar(), global_step=iter_num)
             trainer.step(batch_size)
             cls_acc.update(Y,out)
             nd.waitall()
-            if iter_num > 0 and (iter_num + 1) % 100 == 0:
-                print("iter_num {} acc {} {}sec".format(iter_num, cls_acc.get(), time.time() - t0))
-
+            sw.add_scalar(tag='train_loss', value=loss.mean().asscalar(), global_step=iter_num)
+            sw.add_scalar(tag='train_acc', value=cls_acc.get(), global_step=iter_num)
+            
+            
         print("epoch {} lr {} {}sec".format(epoch,trainer.learning_rate, time.time() - t0))
         train_loss, train_acc = train_loss / len(train_iter), cls_acc.get()
         print("\ttrain loss {} {}".format(train_loss, train_acc))
         test_acc,test_loss = test_net(net, valid_iter, ctx)
-        sw.add_scalar(tag='train_acc', value=train_acc, global_step=epoch)
         sw.add_scalar(tag='test_acc', value=test_acc, global_step=epoch)
-        sw.add_scalar(tag='train_loss', value=train_loss, global_step=epoch)
         sw.add_scalar(tag='test_loss', value=test_loss, global_step=epoch)
         if top_acc < test_acc:
             top_acc = test_acc
