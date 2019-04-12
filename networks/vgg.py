@@ -1,5 +1,5 @@
 from mxnet.gluon import nn
-
+import mxnet as mx
 
 def vgg_block(num_convs, num_channels):
     blk = nn.Sequential()
@@ -30,4 +30,6 @@ def load(type,num_classes):
         conv_arch = ((1,46),(1,128),(2,256),(2,512),(2,512))
     else:
         return None
-    return vgg_net(conv_arch,num_classes)
+    net = vgg_net(conv_arch,num_classes)
+    net.initialize(mx.initializer.Xavier())
+    return net

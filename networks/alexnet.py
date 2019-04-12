@@ -17,11 +17,11 @@ class AlexNet(nn.Block):
         self.layers = nn.Sequential()
         self.layers.add(
         nn.Conv2D(96,kernel_first,strides=stride_first,padding=padding_first,activation="relu"),
-        #LRN(),
+        LRN(),
         nn.MaxPool2D(3,2,padding=1),
 
         nn.Conv2D(256,5,strides=1,padding=2,activation="relu",groups=2),
-        #LRN(),
+        LRN(),
         nn.MaxPool2D(3,2,padding=1),
 
         nn.Conv2D(384,3,padding=1,activation="relu"),

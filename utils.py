@@ -186,7 +186,7 @@ def test_net(net, valid_iter, ctx):
     for batch in valid_iter:
         if isinstance(batch,mx.io.DataBatch):
             X,Y = batch.data[0],batch.label[0]
-            print(X.shape,Y.shape)
+            #print(X.shape,Y.shape)
         else:
             X,Y = batch
         batch_size = X.shape[0]
@@ -219,8 +219,8 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             trainer.set_learning_rate(lr_sch(iter_num))
             if isinstance(batch,mx.io.DataBatch):
                 X,Y = batch.data[0],batch.label[0]
-                total += X.shape[0]
-                print(total)
+                #total += X.shape[0]
+                #print(total)
             else:
                 X,Y = batch
             out = X.as_in_context(ctx)
