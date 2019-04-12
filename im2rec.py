@@ -305,7 +305,7 @@ def parse_args():
     rgroup.add_argument('--quality', type=int, default=95,
                         help='JPEG quality for encoding, 1-100; or PNG compression for encoding, 1-9')
     rgroup.add_argument('--num-thread', type=int, default=1,
-                        help='number of thread to use for encoding. order of images will be different\
+                        help='[>1 may create incorrect rec file]number of thread to use for encoding. order of images will be different\
         from the input list if >1. the input list will be modified to match the\
         resulting order.')
     rgroup.add_argument('--color', type=int, default=1, choices=[-1, 0, 1],

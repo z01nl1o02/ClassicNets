@@ -178,20 +178,26 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
 def test_net(net, valid_iter, ctx):
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
     cls_acc = mx.metric.Accuracy(name="test acc")
-    loss_sum = 0
+    test_loss = []
+    batch_size = 1
+    if isinstance(valid_iter,mx.io.MXDataIter):
+        valid_iter.reset()
+        
     for batch in valid_iter:
         if isinstance(batch,mx.io.DataBatch):
             X,Y = batch.data[0],batch.label[0]
+            print(X.shape,Y.shape)
         else:
             X,Y = batch
+        batch_size = X.shape[0]
         out = X.as_in_context(ctx)
         out = net(out)
         out = out.as_in_context(mx.cpu())
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
-        loss_sum += loss.mean().asscalar()
-    print("\ttest loss {} {}".format(loss_sum/len(valid_iter),cls_acc.get()))
-    return cls_acc.get_name_value()[0][1],loss_sum/len(valid_iter)
+        test_loss.append( loss.sum().asscalar() )
+    print("\ttest loss {} {}".format( np.mean(test_loss)/batch_size,cls_acc.get()))
+    return cls_acc.get_name_value()[0][1],np.mean(test_loss)/batch_size
 
 
 
@@ -201,14 +207,20 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
     cls_acc = mx.metric.Accuracy(name="train acc")
     top_acc = 0
     iter_num = 0
+    #test_acc,test_loss = test_net(net, valid_iter, ctx)
     for epoch in range(num_epochs):
-        train_loss, train_acc = 0, 0
+        train_loss = []
         t0 = time.time()
+        if isinstance(train_iter,mx.io.MXDataIter):
+            train_iter.reset()
+        total = 0
         for batch in train_iter:
             iter_num += 1
             trainer.set_learning_rate(lr_sch(iter_num))
             if isinstance(batch,mx.io.DataBatch):
                 X,Y = batch.data[0],batch.label[0]
+                total += X.shape[0]
+                print(total)
             else:
                 X,Y = batch
             out = X.as_in_context(ctx)
@@ -217,7 +229,7 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
                 out = out.as_in_context(mx.cpu())
                 loss = cls_loss(out, Y)
             loss.backward()
-            train_loss += loss.mean().asscalar()
+            train_loss.append( loss.sum().asscalar() )
             trainer.step(batch_size)
             cls_acc.update(Y,out)
             nd.waitall()
@@ -226,7 +238,7 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             
             
         print("epoch {} lr {} {}sec".format(epoch,trainer.learning_rate, time.time() - t0))
-        train_loss, train_acc = train_loss / len(train_iter), cls_acc.get()
+        train_loss, train_acc = np.mean(train_loss) / batch_size, cls_acc.get()
         print("\ttrain loss {} {}".format(train_loss, train_acc))
         test_acc,test_loss = test_net(net, valid_iter, ctx)
         sw.add_scalar(tag='test_acc', value=test_acc, global_step=epoch)
