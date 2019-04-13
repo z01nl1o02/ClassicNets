@@ -4,15 +4,16 @@ from mxnet import lr_scheduler
 from datasets import fasionmnist,classify_dataset
 from networks import alexnet,vgg,nin,googlelenet,resnet,densenet
 from utils import train_net,CycleScheduler
-import os
+import os,pdb
 
 ctx = mx.gpu(0)
-batch_size = 200
-num_epochs = 50
-base_lr = 0.01
+batch_size = 100
+num_epochs = 200
+base_lr = 0.1
 wd = 0.001
-resize=None
-net_name = "alexnet"
+#resize=(64,64)
+resize = None
+net_name = "resnet-164"
 data_name = "rec"
 
 output_folder = os.path.join("output")
@@ -30,16 +31,17 @@ elif data_name == "fasionmnist":
     class_names = fasionmnist.get_class_names()
 else:
     rec_train,rec_test = "fortrain.rec", "fortest.rec"  
-    train_iter = mx.io.ImageRecordIter( path_imgrec = rec_train, data_shape = (3,65,65), batch_size = batch_size )
-    test_iter = mx.io.ImageRecordIter( path_imgrec = rec_test, data_shape = (3,65,65), batch_size = batch_size )
-    class_names = '0,1,2,3,4'.split(',')
-    num_train = 350000
+    train_iter = mx.io.ImageRecordIter( path_imgrec = rec_train, data_shape = (3,32,32), batch_size = batch_size )
+    test_iter = mx.io.ImageRecordIter( path_imgrec = rec_test, data_shape = (3,32,32), batch_size = batch_size )
+    class_names = '0,1,2,3,4,5,6,7,8,9'.split(',')
+    num_train = 50000
+    print("class names:",class_names)
+    print("# train images:",num_train)
+    
     
 
-
-
 if net_name == "alexnet":
-    net = alexnet.get_net(len(class_names))
+    net = alexnet.get_net(len(class_names),fc_size = 256)
 elif net_name == "vgg-11":
     net = vgg.load("vgg-11",len(class_names))
 elif net_name == "nin":
@@ -53,20 +55,30 @@ elif net_name == "resnet-18":
     net = resnet.load('resnet-18',len(class_names))
     base_lr = 0.05
     resize=(96,96)
+elif net_name == "resnet-164":
+    net = resnet.load('resnet-164',len(class_names))
+    batch_size = 64
 elif net_name == "densenet":
     net = densenet.load(len(class_names))
     base_lr = 0.1
     resize=(96,96)
 
-
+#for param in net.collect_params(): 
+#    if net.collect_params()[param].grad_req != "null":
+#        pp = net.collect_params()[param].grad()        
+        #print(net.collect_params()[param].grad.values())
+       # sw.add_histogram(tag=key, values=value.grads(), global_step=iter_num, bins=1000)
 
 #net.initialize(mx.initializer.Xavier())
 net.collect_params().reset_ctx(ctx)
 
 iter_per_epoch = num_train // batch_size
 #print iter_per_epoch
-lr_sch = lr_scheduler.FactorScheduler(step=iter_per_epoch * 20, factor=0.1)
-lr_sch.base_lr = base_lr
+#lr_sch = lr_scheduler.FactorScheduler(step=iter_per_epoch * 20, factor=0.1)
+#lr_sch.base_lr = base_lr
+
+lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.25), int(num_epochs * 0.75) ], factor=0.1, base_lr = base_lr, warmup_steps = 0)
+
 #lr_sch = CycleScheduler(updates_one_cycle=iter_per_epoch*5,min_lr=base_lr/100, max_lr=base_lr)
 
 trainer = Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":wd})

@@ -208,21 +208,25 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
     top_acc = 0
     iter_num = 0
     #test_acc,test_loss = test_net(net, valid_iter, ctx)
+    #sw.add_graph(net) #only hybrid block supported
+    param_names = net.collect_params().keys()
     for epoch in range(num_epochs):
         train_loss = []
         t0 = time.time()
         if isinstance(train_iter,mx.io.MXDataIter):
             train_iter.reset()
         total = 0
+        trainer.set_learning_rate(lr_sch(epoch))
         for batch in train_iter:
             iter_num += 1
-            trainer.set_learning_rate(lr_sch(iter_num))
             if isinstance(batch,mx.io.DataBatch):
                 X,Y = batch.data[0],batch.label[0]
                 #total += X.shape[0]
                 #print(total)
             else:
                 X,Y = batch
+            #print(X.shape,Y.shape)
+            #print(Y)
             out = X.as_in_context(ctx)
             with autograd.record(True):
                 out = net(out)
@@ -235,6 +239,12 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             nd.waitall()
             sw.add_scalar(tag='train_loss', value=loss.mean().asscalar(), global_step=iter_num)
             sw.add_scalar(tag='train_acc', value=cls_acc.get(), global_step=iter_num)
+            if iter_num % 100 == 0:
+                for name in net.collect_params(): 
+                    param = net.collect_params()[name]
+                    if param.grad_req != "null":
+                        sw.add_histogram(tag=name, values=param.grad(), global_step=iter_num, bins=1000)
+
             
             
         print("epoch {} lr {} {}sec".format(epoch,trainer.learning_rate, time.time() - t0))
