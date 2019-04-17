@@ -6,6 +6,15 @@ import cv2,os,pdb,time
 from mxnet import lr_scheduler
 from mxboard import SummaryWriter
 
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(level = logging.INFO)
+handler = logging.FileHandler("log.txt")
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 class MIOU:
     """
     Computes MIOU
@@ -125,8 +134,8 @@ def test_seg(net, valid_iter, ctx, debug_show, cls_acc = None, cls_loss = None):
         loss_sum += loss.mean().asscalar()
         if debug_show:
             show_seg_mask(net,ind,Y,out)
-    print("\ttest loss {} {}".format(loss_sum/len(valid_iter),cls_acc.get()))
-    print("\t\t{}".format(cls_acc.detail()))
+    logger.info("\ttest loss {} {}".format(loss_sum/len(valid_iter),cls_acc.get()))
+    logger.info("\t\t{}".format(cls_acc.detail()))
     return cls_acc.get_name_value()[0][1]
 
 
@@ -158,15 +167,15 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             train_loss += loss.mean().asscalar()
             trainer.step(batch_size)
             cls_acc.update(Y,out)
-        print("epoch {} lr {}".format(epoch,trainer.learning_rate))
-        print("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
+        logger.info("epoch {} lr {}".format(epoch,trainer.learning_rate))
+        logger.info("\ttrain loss {} {}".format(train_loss / len(train_iter), cls_acc.get()))
         
         if (epoch % 10) == 0:    
             acc = test_seg(net, valid_iter, ctx, debug_show = True, cls_acc = cls_acc,cls_loss = cls_loss)
             net_path = '{}last_model.params'.format(save_prefix)
             net.save_parameters(net_path)
             if top_acc < acc:
-                print('\ttop valid acc {}'.format(acc))
+                logger.info('\ttop valid acc {}'.format(acc))
                 top_acc = acc
                 net_path = '{}top_acc_{}_{:.5f}.params'.format(save_prefix,epoch,top_acc)
                 net.save_parameters(net_path)
@@ -196,12 +205,13 @@ def test_net(net, valid_iter, ctx):
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
         test_loss.append( loss.sum().asscalar() )
-    print("\ttest loss {} {}".format( np.mean(test_loss)/batch_size,cls_acc.get()))
+    logger.info("\ttest loss {} {}".format( np.mean(test_loss)/batch_size,cls_acc.get()))
     return cls_acc.get_name_value()[0][1],np.mean(test_loss)/batch_size
 
 
 
 def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
+    logger.info("===================START TRAINING====================")
     sw = SummaryWriter(logdir='logs', flush_secs=5)
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
     cls_acc = mx.metric.Accuracy(name="train acc")
@@ -247,22 +257,23 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
 
             
             
-        print("epoch {} lr {} {}sec".format(epoch,trainer.learning_rate, time.time() - t0))
+        logger.info("epoch {} lr {} {}sec".format(epoch,trainer.learning_rate, time.time() - t0))
         train_loss, train_acc = np.mean(train_loss) / batch_size, cls_acc.get()
-        print("\ttrain loss {} {}".format(train_loss, train_acc))
-        test_acc,test_loss = test_net(net, valid_iter, ctx)
-        sw.add_scalar(tag='test_acc', value=test_acc, global_step=epoch)
-        sw.add_scalar(tag='test_loss', value=test_loss, global_step=epoch)
-        if top_acc < test_acc:
-            top_acc = test_acc
-            print('\ttop valid acc {}'.format(test_acc))
-            if isinstance(net, mx.gluon.nn.HybridSequential) or isinstance(net, mx.gluon.nn.HybridBlock):
-                pf = '{}_{:.3f}.params'.format(save_prefix,top_acc)
-                net.export(pf,epoch)
-            else:
-                net_path = '{}top_acc_{}_{:.3f}.params'.format(save_prefix,epoch,top_acc)
-                net.save_parameters(net_path)
-            
+        logger.info("\ttrain loss {} {}".format(train_loss, train_acc))
+        if epoch > 0 and (epoch % 10) == 0:
+            test_acc,test_loss = test_net(net, valid_iter, ctx)
+            sw.add_scalar(tag='test_acc', value=test_acc, global_step=epoch)
+            sw.add_scalar(tag='test_loss', value=test_loss, global_step=epoch)
+            if top_acc < test_acc:
+                top_acc = test_acc
+                logger.info('\ttop valid acc {}'.format(test_acc))
+                if isinstance(net, mx.gluon.nn.HybridSequential) or isinstance(net, mx.gluon.nn.HybridBlock):
+                    pf = '{}_{:.3f}.params'.format(save_prefix,top_acc)
+                    net.export(pf,epoch)
+                else:
+                    net_path = '{}top_acc_{}_{:.3f}.params'.format(save_prefix,epoch,top_acc)
+                    net.save_parameters(net_path)
+                
 
     sw.close()
 
