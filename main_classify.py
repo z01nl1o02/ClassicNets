@@ -1,20 +1,20 @@
 import mxnet as mx
 from mxnet.gluon import Trainer
 from mxnet import lr_scheduler
-from datasets import fasionmnist,classify_dataset
+from datasets import fasionmnist,classify_dataset,cifar
 from networks import alexnet,vgg,nin,googlelenet,resnet,densenet
 from utils import train_net,CycleScheduler
 import os,pdb
 
 ctx = mx.gpu(0)
-batch_size = 100
+batch_size = 64
 num_epochs = 200
 base_lr = 0.1
 wd = 0.001
 #resize=(64,64)
 resize = None
 net_name = "resnet-164"
-data_name = "rec"
+data_name = "cifar"
 
 output_folder = os.path.join("output")
 output_prefix = os.path.join(output_folder,net_name)
@@ -29,6 +29,9 @@ if data_name == "classify_dataset":
 elif data_name == "fasionmnist":
     train_iter,test_iter, num_train = fasionmnist.load(batch_size,resize=resize)
     class_names = fasionmnist.get_class_names()
+elif data_name == "cifar":
+    train_iter,test_iter,info = cifar.load()
+    class_names = cifar.get_class_names()    
 else:
     rec_train,rec_test = "fortrain.rec", "fortest.rec"  
     train_iter = mx.io.ImageRecordIter( path_imgrec = rec_train, data_shape = (3,32,32), batch_size = batch_size )
@@ -57,7 +60,6 @@ elif net_name == "resnet-18":
     resize=(96,96)
 elif net_name == "resnet-164":
     net = resnet.load('resnet-164',len(class_names))
-    batch_size = 64
 elif net_name == "densenet":
     net = densenet.load(len(class_names))
     base_lr = 0.1
@@ -72,7 +74,6 @@ elif net_name == "densenet":
 #net.initialize(mx.initializer.Xavier())
 net.collect_params().reset_ctx(ctx)
 
-iter_per_epoch = num_train // batch_size
 #print iter_per_epoch
 #lr_sch = lr_scheduler.FactorScheduler(step=iter_per_epoch * 20, factor=0.1)
 #lr_sch.base_lr = base_lr

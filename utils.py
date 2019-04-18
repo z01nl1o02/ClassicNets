@@ -5,6 +5,7 @@ import numpy as np
 import cv2,os,pdb,time
 from mxnet import lr_scheduler
 from mxboard import SummaryWriter
+from mxnet import contrib
 
 import logging
 logger = logging.getLogger(__name__)
@@ -277,7 +278,101 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
 
     sw.close()
 
+##############################################################
+##ssd
 
+
+def calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
+    cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
+    bbox_loss = gluon.loss.L1Loss()
+    cls = cls_loss(cls_preds, cls_labels)
+    bbox = bbox_loss(bbox_preds * bbox_masks, bbox_labels * bbox_masks)
+    return cls + bbox
+
+def cls_eval(cls_preds, cls_labels):
+    # 由于类别预测结果放在最后一维，argmax需要指定最后一维
+    return (cls_preds.argmax(axis=-1) == cls_labels).sum().asscalar()
+
+def bbox_eval(bbox_preds, bbox_labels, bbox_masks):
+   # print (bbox_labels*bbox_masks)
+  #  print (bbox_preds*bbox_masks).sum()
+    return ((bbox_labels - bbox_preds) * bbox_masks).abs().sum().asscalar()
+    
+def predict_ssd(net,X):
+    anchors, cls_preds, bbox_preds = net(X)
+    cls_probs = cls_preds.softmax().transpose((0, 2, 1))
+    output = contrib.nd.MultiBoxDetection(cls_probs, bbox_preds, anchors)
+    idx = [i for i, row in enumerate(output[0]) if row[0].asscalar() != -1]
+    if len(idx) < 1:
+        return None
+    return output[0, idx]  
+    
+    
+def test_net(net, valid_iter, ctx):
+    start = time.time()
+    acc_sum, mae_sum, n, m = 0.0, 0.0, 0, 0
+    loss_hist = []
+    for batch in valid_iter:        
+        X = batch[0].as_in_context(ctx)
+        Y = batch[1].as_in_context(ctx)        
+        anchors, cls_preds, bbox_preds = net(X)
+        # 为每个锚框标注类别和偏移量
+        #pdb.set_trace()
+        bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
+            anchors, Y, cls_preds.transpose((0, 2, 1)))
+        # 根据类别和偏移量的预测和标注值计算损失函数
+        l = calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
+                      bbox_masks)
+        loss_hist.append( l.asnumpy()[0] / X.shape[0] )
+        acc_sum += cls_eval(cls_preds, cls_labels)
+        n += cls_labels.size
+        mae_sum += bbox_eval(bbox_preds, bbox_labels, bbox_masks)
+        m += bbox_labels.size
+    loss = np.asarray(loss_hist).mean()
+    logger.info('\t test class err %.5e, bbox mae %.5e, loss %.5e, time %.1f sec' % ( 
+        1 - acc_sum / n, mae_sum / m, loss, time.time() - start))
+    return
+    
+    
+def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
+    logger.info("===================START TRAINING====================")
+    start = time.time()
+    for epoch in range(num_epochs):
+        acc_sum, mae_sum, n, m = 0.0, 0.0, 0, 0
+        loss_hist = []
+        trainer.set_learning_rate(lr_sch(epoch))
+        for batch in train_iter:        
+            X = batch[0].as_in_context(ctx)
+            Y = batch[1].as_in_context(ctx)
+            #print(X)
+            #print(X.shape,Y.shape)
+            with autograd.record():
+                # 生成多尺度的锚框，为每个锚框预测类别和偏移量
+                anchors, cls_preds, bbox_preds = net(X)
+                # 为每个锚框标注类别和偏移量
+                #pdb.set_trace()
+                bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
+                    anchors, Y, cls_preds.transpose((0, 2, 1)))
+                # 根据类别和偏移量的预测和标注值计算损失函数
+                l = calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
+                              bbox_masks)
+            l.backward()
+            trainer.step(batch_size)
+            #nd.waitall()
+            loss_hist.append( l.asnumpy()[0] / batch_size )
+            acc_sum += cls_eval(cls_preds, cls_labels)
+            n += cls_labels.size
+            mae_sum += bbox_eval(bbox_preds, bbox_labels, bbox_masks)
+            m += bbox_labels.size
+
+
+        if (epoch + 1) % 10 == 0:
+            loss = np.asarray(loss_hist).mean()
+            logger.info('epoch %2d, class err %.5e, bbox mae %.5e, loss %.5e, lr %.5e time %.1f sec' % (
+                epoch + 1, 1 - acc_sum / n, mae_sum / m, loss, trainer.learning_rate, time.time() - start))
+            start = time.time() #restart       
+            test_net(net,valid_iter,ctx)
+            net.save_parameters("{}.params".format(save_prefix))   
 
 ###########################################################
 ##rnn
