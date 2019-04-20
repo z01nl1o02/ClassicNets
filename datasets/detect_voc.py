@@ -1,5 +1,5 @@
 from mxnet import gluon
-import os,cv2
+import os,cv2,pdb
 import numpy as np
 import random
 import xml.etree.ElementTree as ET
@@ -21,7 +21,10 @@ class DETECT_VOC(gluon.data.Dataset):
                          'motorbike', 'person', 'pottedplant',
                          'sheep', 'sofa', 'train', 'tvmonitor')
 
-        
+        if image_set == "trainval":
+            self.fortrain = True
+        else:
+            self.fortrain = False
         self._class_to_ind = dict(zip(self._classes, range(len(self._classes))))
         self._image_ext = '.jpg'
         self._image_index = self._load_image_set_index()
@@ -99,7 +102,23 @@ class DETECT_VOC(gluon.data.Dataset):
         targets = self._load_pascal_annotation(image_name)
         path = self.image_path_from_index(image_name)
         img = cv2.imread(path,1)
-        img = cv2.resize(img,self._resize)
+        
+        
+        if self.fortrain:
+            interp_methods = [cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_AREA, \
+                              cv2.INTER_NEAREST, cv2.INTER_LANCZOS4]
+        else:
+            interp_methods = [cv2.INTER_LINEAR]
+        interp_method = interp_methods[int(np.random.uniform(0, 1) * len(interp_methods))]              
+        img = cv2.resize(img,self._resize,interp_method)
+        #pdb.set_trace()
+        if self.fortrain:
+            if np.random.uniform(0, 1) > 0.5:
+                img = cv2.flip(img, 1)
+                tmp = 1.0 - targets[:, 1]
+                targets[:, 1] = 1.0 - targets[:, 3]
+                targets[:, 3] = tmp
+        
         img = np.transpose(img,(2,0,1))
         img = np.float32(img) / 255
         return img,targets
@@ -113,6 +132,24 @@ def load(year,batch_size):
     train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover")
     test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
     return train_iter, test_iter, len(trainset._classes)
+   
+if 0:
+    dataloader, _, _ = load("2007",1)
+    #print("---")
+    for data in dataloader:
+        img,targets = data
+        img,targets = img.asnumpy()[0], targets.asnumpy()[0]
+        img = np.uint8(img * 255)
+        img = np.transpose(img, (1,2,0))
+        H,W,C = img.shape
+        #print(img.shape)
+        for target in targets:
+            cls,x0,y0,x1,y1 = (target * np.array([1,W,H,W,H])).astype(np.int32)
+            if cls < 0:
+                continue 
+            img = cv2.rectangle(img,(x0,y0),(x1,y1),(255,255,0), 2)
+        cv2.imshow("vis",img)
+        cv2.waitKey(500)
     
     
 
