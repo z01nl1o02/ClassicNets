@@ -297,14 +297,15 @@ def bbox_eval(bbox_preds, bbox_labels, bbox_masks):
    # print (bbox_labels*bbox_masks)
   #  print (bbox_preds*bbox_masks).sum()
     return ((bbox_labels - bbox_preds) * bbox_masks).abs().sum().asscalar()
-    
+  
+import pdb
 def predict_ssd(net,X):
     anchors, cls_preds, bbox_preds = net(X)
     cls_probs = cls_preds.softmax().transpose((0, 2, 1))
     output = contrib.nd.MultiBoxDetection(cls_probs, bbox_preds, anchors)
     idx = [i for i, row in enumerate(output[0]) if row[0].asscalar() != -1]
     if len(idx) < 1:
-        return None
+        return mx.nd.zeros((1,output.shape[-1])) - 1
     return output[0, idx]  
     
     
@@ -366,13 +367,13 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             m += bbox_labels.size
 
 
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % 50 == 0:
             loss = np.asarray(loss_hist).mean()
             logger.info('epoch %2d, class err %.5e, bbox mae %.5e, loss %.5e, lr %.5e time %.1f sec' % (
                 epoch + 1, 1 - acc_sum / n, mae_sum / m, loss, trainer.learning_rate, time.time() - start))
             start = time.time() #restart       
             test_net(net,valid_iter,ctx)
-            net.save_parameters("{}.params".format(save_prefix))   
+            net.save_parameters("{}_epoch{}.params".format(save_prefix,epoch))   
 
 ###########################################################
 ##rnn

@@ -57,8 +57,8 @@ class SSD(nn.Block):
         self.num_classes = num_classes
         
         if anchor_sizes is None:
-            #self.anchor_sizes = ((0.2, 0.272), (0.37, 0.447), (0.54, 0.619), (0.71, 0.79),(0.88, 0.961))
-            self.anchor_sizes = [[0.1, 0.16], [0.16, 0.22], [0.22, 0.28], [0.28, 0.34], [0.34, 0.4]]
+            self.anchor_sizes = ((0.2, 0.272), (0.37, 0.447), (0.54, 0.619), (0.71, 0.79),(0.88, 0.961))
+            #self.anchor_sizes = [[0.1, 0.16], [0.16, 0.22], [0.22, 0.28], [0.28, 0.34], [0.34, 0.4]]
         else:
             self.anchor_sizes = anchor_sizes
         
