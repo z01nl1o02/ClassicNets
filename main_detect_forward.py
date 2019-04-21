@@ -8,24 +8,41 @@ from utils import train_ssd,CycleScheduler,predict_ssd
 import os,pdb,cv2
 from tools.eval_metric import VOC07MApMetric
 
+
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(level = logging.INFO)
+handler = logging.FileHandler("forward_log.txt")
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 ctx = mx.gpu(0)
 
 resize = (256,256)
 
-ds_forward = detect_voc.DETECT_VOC_FORWARD("test","2007")
-classes = ds_forward.classes()
+
+
+
+testset = detect_voc.DETECT_VOC("test","2007",False)
+classes = testset._classes
 number_classes = len(classes)
+
 
 net = ssd.SSD(number_classes)
 import pdb
-net.load_parameters('ssd_256x256.params')
+net.load_parameters('ssd_epoch49.params')
 net.collect_params().reset_ctx(ctx)
 
 
+logger.info("========ssd forward===========")
 mAP = VOC07MApMetric()
 
-for ind in range(len(ds_forward)):
-    feat,target,src,name = ds_forward[ind]
+for idx in range(len(testset)):
+    feat,target = testset[idx]
+    src = testset.get_origin_image_at(idx)
+    name = testset.get_name_at(idx)
     X = nd.array( np.expand_dims(feat,0) ).as_in_context(ctx)
     output = predict_ssd(net,X).asnumpy()
     H,W,C = src.shape
@@ -40,10 +57,11 @@ for ind in range(len(ds_forward)):
     labels,preds = np.expand_dims(labels,0), np.expand_dims(preds,0)
     labels,preds = mx.nd.array(labels), mx.nd.array(preds)
     mAP.update(labels,preds)
-    if ind > 0 and 0 == (ind % 100):
-        print(mAP.get())
+    if idx > 0 and 0 == (idx % 100):
+        logger.info(mAP.get())
 
-print('mAP: ', mAP.get())        
+logger.info("in total:")
+logger.info(mAP.get())        
 exit(0)
         
 

@@ -4,7 +4,11 @@ from mxnet import gluon,nd,autograd
 import numpy as np
 import cv2,os,pdb,time
 from mxnet import lr_scheduler
-from mxboard import SummaryWriter
+
+use_mxboard = False
+
+if use_mxboard:
+    from mxboard import SummaryWriter
 from mxnet import contrib
 
 import logging
@@ -248,13 +252,14 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             trainer.step(batch_size)
             cls_acc.update(Y,out)
             nd.waitall()
-            sw.add_scalar(tag='train_loss', value=loss.mean().asscalar(), global_step=iter_num)
-            sw.add_scalar(tag='train_acc', value=cls_acc.get(), global_step=iter_num)
-            if iter_num % 100 == 0:
-                for name in net.collect_params(): 
-                    param = net.collect_params()[name]
-                    if param.grad_req != "null":
-                        sw.add_histogram(tag=name, values=param.grad(), global_step=iter_num, bins=1000)
+            if use_mxboard:
+                sw.add_scalar(tag='train_loss', value=loss.mean().asscalar(), global_step=iter_num)
+                sw.add_scalar(tag='train_acc', value=cls_acc.get(), global_step=iter_num)
+                if iter_num % 100 == 0:
+                    for name in net.collect_params():
+                        param = net.collect_params()[name]
+                        if param.grad_req != "null":
+                            sw.add_histogram(tag=name, values=param.grad(), global_step=iter_num, bins=1000)
 
             
             
@@ -263,8 +268,9 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
         logger.info("\ttrain loss {} {}".format(train_loss, train_acc))
         if epoch > 0 and (epoch % 10) == 0:
             test_acc,test_loss = test_net(net, valid_iter, ctx)
-            sw.add_scalar(tag='test_acc', value=test_acc, global_step=epoch)
-            sw.add_scalar(tag='test_loss', value=test_loss, global_step=epoch)
+            if use_mxboard:
+                sw.add_scalar(tag='test_acc', value=test_acc, global_step=epoch)
+                sw.add_scalar(tag='test_loss', value=test_loss, global_step=epoch)
             if top_acc < test_acc:
                 top_acc = test_acc
                 logger.info('\ttop valid acc {}'.format(test_acc))
@@ -275,8 +281,8 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
                     net_path = '{}top_acc_{}_{:.3f}.params'.format(save_prefix,epoch,top_acc)
                     net.save_parameters(net_path)
                 
-
-    sw.close()
+    if use_mxboard:
+        sw.close()
 
 ##############################################################
 ##ssd
@@ -366,12 +372,13 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             mae_sum += bbox_eval(bbox_preds, bbox_labels, bbox_masks)
             m += bbox_labels.size
 
-
-        if (epoch + 1) % 50 == 0:
+	if (epoch + 1)%2 == 0:
             loss = np.asarray(loss_hist).mean()
             logger.info('epoch %2d, class err %.5e, bbox mae %.5e, loss %.5e, lr %.5e time %.1f sec' % (
                 epoch + 1, 1 - acc_sum / n, mae_sum / m, loss, trainer.learning_rate, time.time() - start))
-            start = time.time() #restart       
+            start = time.time() #restart    
+
+        if (epoch + 1) % 50 == 0:
             test_net(net,valid_iter,ctx)
             net.save_parameters("{}_epoch{}.params".format(save_prefix,epoch))   
 
