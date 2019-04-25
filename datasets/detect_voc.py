@@ -88,13 +88,13 @@ class DETECT_VOC(gluon.data.Dataset):
         return len(self._paths)
      
     def get_name_at(self,idx):
-	image_path, xml_path = self._paths[idx]
-	return os.path.split(image_path)[-1]
+        image_path, xml_path = self._paths[idx]
+        return os.path.split(image_path)[-1]
 
     def get_origin_image_at(self,idx):
         image_path, xml_path = self._paths[idx]
         img = cv2.imread(image_path,1)
-	return img
+        return img
 
 	   
     def __getitem__(self,idx):
@@ -112,9 +112,7 @@ class DETECT_VOC(gluon.data.Dataset):
         #pdb.set_trace()
         if self._fortrain:
             if np.random.uniform(0, 1) > 0.5:
-		#cv2.imshow("src",img)
                 img = cv2.flip(img, 1)
-		#cv2.imshow("flip",img)
                 tmp = 1.0 - targets[:, 1]
                 targets[:, 1] = 1.0 - targets[:, 3]
                 targets[:, 3] = tmp
@@ -143,7 +141,7 @@ if 0:
         img,targets = img.asnumpy()[0], targets.asnumpy()[0]
         img = np.uint8(img * 255)
         img = np.transpose(img, (1,2,0))
-	img = img.copy()
+        img = img.copy()
         H,W,C = img.shape
         for target in targets:
             cls,x0,y0,x1,y1 = (target * np.array([1,W,H,W,H])).astype(np.int32)
