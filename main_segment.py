@@ -11,12 +11,12 @@ import os
 ctx = mx.gpu(0)
 batch_size = 16
 num_epochs = 100
-base_lr = 0.001 #should be small for model with pretrained model
+base_lr = 0.1 #should be small for model with pretrained model
 wd = 0.0005
 net_name = "unet"
-dataset_name = 'vocaug'
+dataset_name = 'voc'
 label_scale = 1 #8 4 2 1     #enet train from raw to fine
-load_to_train = True
+load_to_train = False
 output_folder = os.path.join("output")
 output_prefix = os.path.join(output_folder,net_name+"_")
 
@@ -41,7 +41,6 @@ elif net_name == "enet":
     net = enet.get_net(len(class_names),label_downscale=label_scale)
 elif net_name == "unet":
     net = unet.get_net(len(class_names))
-    base_lr = 0.0001
 
 if load_to_train:
     print('finetuning based on pretrained model')
@@ -64,7 +63,7 @@ trainer = Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":wd
 
 #loss = FocusLoss(axis=1,gamma=1)
 weight_class = [1.0 for k in range(len(class_names))]
-weight_class[0] = 0.01
+#weight_class[0] = 0.01
 loss = WeightCELoss(axis=1, weight_classes = weight_class)
 
 

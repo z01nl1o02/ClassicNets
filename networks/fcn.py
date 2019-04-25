@@ -94,7 +94,7 @@ if 0:
     fcn = FCN(2)
     fcn.collect_params().reset_ctx(ctx)
     x = mx.nd.random.uniform(0,1,(2,3,64,64),ctx=ctx)
-    print 'input: ',x.shape
+    print('input: ',x.shape)
     y = fcn(x)
-    print 'output: ',y.shape
+    print('output: ',y.shape)
 
