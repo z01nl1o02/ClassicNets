@@ -3,35 +3,60 @@ import os,cv2
 import numpy as np
 import random
 
-def pascal_palette(): #RGB mode
+def pascal_palette_all_classes(): #RGB mode
   palette = {(  0,   0,   0) : 0 ,
-             (128,   0,   0) : 1 , #aerplane
-             (  0, 128,   0) : 2 , #bicycle
-             (128, 128,   0) : 3 , #bird
-             (  0,   0, 128) : 4 , #boat
-             (128,   0, 128) : 5 , #bottle
-             (  0, 128, 128) : 6 , #bus
-             (128, 128, 128) : 7 , #car
-             ( 64,   0,   0) : 8 , #cat
-             (192,   0,   0) : 9 , #chair
-             ( 64, 128,   0) : 10, #cow
-             (192, 128,   0) : 11, #DiningTable
-             ( 64,   0, 128) : 12, #dog
-             (192,   0, 128) : 13, #horse
-             ( 64, 128, 128) : 14, #motorbike
-             (192, 128, 128) : 15, #person
-             (  0,  64,   0) : 16, #potted-plant
-             (128,  64,   0) : 17, #sheep
-             (  0, 192,   0) : 18, #sofa
-             (128, 192,   0) : 19, #train
-             (  0,  64, 128) : 20 } #monitor
+             (  1,   1,   1) : 1 , #hat
+             (  2,   2,   2) : 2 , #hair           
+             (  3,   3,   3) : 3 , #sunglass       
+             (  4,   4,   4) : 4 , #upper-clothes
+             (  5,   5,   5) : 5 , #skirt
+             (  6,   6,   6) : 6 , #pants
+             (  7,   7,   7) : 7 , #dress 
+             (  8,   8,   8) : 8 , #belt
+             (  9,   9,   9) : 9 , #left-shoe
+             (  10,   10,   10) : 10, #right-shoe 
+             (  11,   11,   11) : 11, #face 
+             (  12,   12,   12) : 12, #left-leg 
+             (  13,   13,   13) : 13, #right-leg
+             (  14,   14,   14) : 14, #left-arm 
+             (  15,   15,   15) : 15, #right-arm
+             (  16,   16,   16) : 16, #bag
+             (  17,   17,   17) : 17, #scarf 
+             }
 
   return palette
+  
+def pascal_palette_two_classes(): #RGB mode
+  palette = {(  0,   0,   0) : 0 ,
+             (  1,   1,   1) : 1 , #hat
+             (  2,   2,   2) : 1 , #hair           
+             (  3,   3,   3) : 1 , #sunglass       
+             (  4,   4,   4) : 1 , #upper-clothes
+             (  5,   5,   5) : 1 , #skirt
+             (  6,   6,   6) : 1 , #pants
+             (  7,   7,   7) : 1 , #dress 
+             (  8,   8,   8) : 1 , #belt
+             (  9,   9,   9) : 1 , #left-shoe
+             (  10,   10,   10) : 1, #right-shoe 
+             (  11,   11,   11) : 1, #face 
+             (  12,   12,   12) : 1, #left-leg 
+             (  13,   13,   13) : 1, #right-leg
+             (  14,   14,   14) : 1, #left-arm 
+             (  15,   15,   15) : 1, #right-arm
+             (  16,   16,   16) : 1, #bag
+             (  17,   17,   17) : 1, #scarf 
+             }
 
-def convert_from_color_segmentation(arr_3d):
+  return palette  
+
+  
+def convert_from_color_segmentation(arr_3d,number_classes):
     arr_3d = cv2.cvtColor(arr_3d,cv2.COLOR_BGR2RGB)
     arr_2d = np.zeros((arr_3d.shape[0], arr_3d.shape[1]), dtype=np.uint8)
-    palette = pascal_palette()
+    if number_classes == 2:
+        palette = pascal_palette_two_classes()
+    else:
+        palette = pascal_palette()
     for c, i in palette.items():
         m = np.all(arr_3d == np.array(c).reshape(1, 1, 3), axis=2)
         arr_2d[m] = i
@@ -40,13 +65,14 @@ def convert_from_color_segmentation(arr_3d):
 
 
 class DatasetVOC(gluon.data.Dataset):
-    def __init__(self,voc_sdk_root,fortrain, label_scale, len_resize = 256, hw_crop = (256,256)):
+    def __init__(self,voc_sdk_root,fortrain, label_scale, len_resize = 128, hw_crop = (128,128)):
         super(DatasetVOC,self).__init__()
         self.data_pairs = []
         self.fortrain = fortrain
         self.len_resize = len_resize
         self.hw_crop = hw_crop
         self.label_scale = label_scale
+        self.number_classes = 2
         if fortrain:
             list_file = "ImageSets/Segmentation/train.txt"
         else:
@@ -116,21 +142,21 @@ class DatasetVOC(gluon.data.Dataset):
         image = np.transpose(image,(2,0,1))
 
         label = cv2.resize(label, (w//self.label_scale, h//self.label_scale), interpolation=cv2.INTER_NEAREST) #encode only
-        label = convert_from_color_segmentation(label).astype(np.int64)
+        label = convert_from_color_segmentation(label,self.number_classes).astype(np.int64)
 
         return (image,label)
 
 def get_class_names():
-    names = "background,aerplane,bicycle,bird,boat,bottle,bus,car,cat,chair,cow,dining-table,dog,horse,motorbike,person" + \
-            ",potted-plant,sheep,sofa,train,monitor"
+    names = "background,hat,hair,sunglass,upper-clothes,skirt,pants,dress,belt,left-shoe,right-shoe,face,left-leg,right-leg,left-arm,right-arm" + \
+            ",bag,scarf"
     return names.split(',')
 import platform
 def load(batch_size,scale):
-    root = "E:/dataset/VOCdevkit/"
+    root = "G:/seg/"
     if platform.system() == "Linux":
-        root = "/home/c001/data/VOCdevkit/"
-    trainset = DatasetVOC(voc_sdk_root=os.path.join(root,"VOC2007/"),fortrain=True,label_scale=scale)
-    testset = DatasetVOC(voc_sdk_root=os.path.join(root,"VOC2007/"),fortrain=False,label_scale=scale)
+        root = "data/VOCdevkit/"
+    trainset = DatasetVOC(voc_sdk_root=os.path.join(root,"humanparsing"),fortrain=True,label_scale=scale)
+    testset = DatasetVOC(voc_sdk_root=os.path.join(root,"humanparsing"),fortrain=False,label_scale=scale)
     train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover")
     test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
     return train_iter, test_iter, len(trainset)
