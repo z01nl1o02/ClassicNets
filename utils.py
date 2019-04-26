@@ -209,6 +209,8 @@ def test_net(net, valid_iter, ctx):
         batch_size = X.shape[0]
         out = X.as_in_context(ctx)
         out = net(out)
+        if len(out.shape)==4:
+            out = out[:,:,0,0] #replace fc with conv
         out = out.as_in_context(mx.cpu())
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
@@ -220,7 +222,8 @@ def test_net(net, valid_iter, ctx):
 
 def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
     logger.info("===================START TRAINING====================")
-    sw = SummaryWriter(logdir='logs', flush_secs=5)
+    if use_mxboard:
+        sw = SummaryWriter(logdir='logs', flush_secs=5)
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
     cls_acc = mx.metric.Accuracy(name="train acc")
     top_acc = 0
@@ -248,16 +251,22 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             out = X.as_in_context(ctx)
             with autograd.record(True):
                 out = net(out)
-                out = out.as_in_context(mx.cpu())
-                loss = cls_loss(out, Y)
+                out = out.as_in_context(mx.cpu())                
+                if len(out.shape)==4:
+                    out = nd.reshape(out,(out.shape[0],out.shape[1]))
+                
+                loss = cls_loss(out, Y)        
+           # print(out.asnumpy()[0])
+           # print('loss = ',loss.sum().asscalar())
             loss.backward()
             train_loss.append( loss.sum().asscalar() )
             trainer.step(batch_size)
             cls_acc.update(Y,out)
             nd.waitall()
             if use_mxboard:
-                sw.add_scalar(tag='train_loss', value=loss.mean().asscalar(), global_step=iter_num)
-                sw.add_scalar(tag='train_acc', value=cls_acc.get(), global_step=iter_num)
+                if iter_num % 100 == 0:
+                    sw.add_scalar(tag='train_loss', value=loss.mean().asscalar(), global_step=iter_num)
+                    sw.add_scalar(tag='train_acc', value=cls_acc.get(), global_step=iter_num)
                 if iter_num % 100 == 0:
                     for name in net.collect_params():
                         param = net.collect_params()[name]
@@ -318,7 +327,7 @@ def predict_ssd(net,X):
     return output[0, idx]  
     
     
-def test_net(net, valid_iter, ctx):
+def test_ssd(net, valid_iter, ctx):
     start = time.time()
     acc_sum, mae_sum, n, m = 0.0, 0.0, 0, 0
     loss_hist = []
