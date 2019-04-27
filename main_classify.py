@@ -14,8 +14,8 @@ if __name__=="__main__":
     base_lr = 0.1
     wd = 0.0004
     mom = 0.9
-    #resize=(64,64)
-    resize = None
+    resize=(35,35)
+    #resize = None
     net_name = "squeezenet"
     data_name = "cifar"
 
@@ -34,11 +34,9 @@ if __name__=="__main__":
         class_names = fasionmnist.get_class_names()
     elif data_name == "cifar":
         if net_name == "squeezenet":
-            train_iter,test_iter,info = cifar.load(batch_size,True)
+            train_iter,test_iter,class_names = cifar.load(batch_size,resize)
         else:
-            train_iter,test_iter,info = cifar.load(batch_size)
-        class_names = cifar.get_class_names()    
-        print(info)
+            train_iter,test_iter,class_names = cifar.load(batch_size)
     else:
         rec_train,rec_test = "fortrain.rec", "fortest.rec"  
         train_iter = mx.io.ImageRecordIter( path_imgrec = rec_train, data_shape = (3,32,32), batch_size = batch_size )
@@ -73,9 +71,9 @@ if __name__=="__main__":
         resize=(96,96)
     elif net_name == "squeezenet":
         net = squeezenet.load(len(class_names))
-        base_lr = 0.001 #must be with small lr
+        base_lr = 0.01 #must be with small lr
 
-    print(output_prefix + '.params')
+   # print(output_prefix + '.params')
     if os.path.exists( output_prefix + '.params' ):
         net.load_parameters( output_prefix + '.params' )
         print('finetune based on ', output_prefix, '.params')

@@ -39,7 +39,7 @@ class AlexNet(nn.Block):
     def forward(self,x):
         return self.layers(x)
 
-def get_net(num_classes,kernel_first = 11, stride_first = 4, padding_first = 5,fc_size = 4096):
+def load(num_classes,kernel_first = 11, stride_first = 4, padding_first = 5,fc_size = 4096):
     net = AlexNet(num_classes, kernel_first=kernel_first,stride_first=stride_first,
                   padding_first=padding_first,fc_size=fc_size)
     net.initialize(mx.initializer.Xavier())
