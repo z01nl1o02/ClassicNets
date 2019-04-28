@@ -369,7 +369,7 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
                 # 为每个锚框标注类别和偏移量
                 bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
                     anchors, Y, cls_preds.transpose((0, 2, 1)))
-                if 0: 
+                if 0:
                     img = np.transpose( X[0].asnumpy(), (1,2,0) )
                     img = np.uint8(img * 255)
                     #img = cv2.resize(img,(750,750))
@@ -407,7 +407,7 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
                         if dx + dy < min_dist:
                             min_dist = dx + dy
                             pt = [ox,oy,x0,x1,y0,y1]
-                        if np.absolute(int(ox) - tx) > 5 or np.absolute(int(oy) - ty) > 5:
+                        if np.absolute(int(ox) - tx) > 15 or np.absolute(int(oy) - ty) > 15:
                             continue
                         #if x1 == x0 and y0 == y1:
                         #    continue

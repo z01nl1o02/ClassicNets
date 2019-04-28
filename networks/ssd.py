@@ -14,6 +14,24 @@ def down_sample_blk(num_channels):
                 nn.Activation('relu'))
     blk.add(nn.MaxPool2D(2))
     return blk
+
+
+class INCEPTION_BLOCK(nn.Block):
+    def __init__(self,channels, **kwargs):
+        super(INCEPTION_BLOCK, self).__init__(**kwargs)
+        self.p1_1 = nn.Conv2D(channels, kernel_size=1, activation="relu")
+
+        self.p2_1 = nn.Conv2D(channels//2,kernel_size=1, activation="relu")
+        self.p2_2 = nn.Conv2D(channels,kernel_size=3, padding=1, activation="relu")
+
+        self.p3_1 = nn.Conv2D(channels//4, kernel_size=1,activation="relu")
+        self.p3_2 = nn.Conv2D(channels,kernel_size=5, padding=2, activation="relu")
+
+    def forward(self, x):
+        p1 = self.p1_1(x)
+        p2 = self.p2_2(self.p2_1(x))
+        p3 = self.p3_2(self.p3_1(x))
+        return nd.concat(p1,p2,p3,dim=1)
     
     
 #类别预测层，这里用一个卷积层实现
@@ -59,10 +77,7 @@ class SSD(nn.Block):
         self.num_classes = num_classes
         
         if anchor_sizes is None:
-            self.anchor_sizes = [[.1, .141], [.2,.272], [.37, .447], [.54, .619], [.71, .79], [.88, .961]]
-            #self.anchor_sizes = ((0.2, 0.272), (0.37, 0.447), (0.54, 0.619), (0.71, 0.79),(0.88, 0.961),(0.9,0.99))
-            #self.anchor_sizes = [[0.05, 0.2], [0.2, 0.4], [0.4, 0.6], [0.6, 0.8], [0.8, 0.95]]
-            #self.anchor_sizes = [[0.1, 0.16], [0.16, 0.22], [0.22, 0.28], [0.28, 0.34], [0.34, 0.4]]
+            self.anchor_sizes = ((0.2, 0.272), (0.37, 0.447), (0.54, 0.619), (0.71, 0.79),(0.88, 0.961),(0.9,0.99))
         else:
             self.anchor_sizes = anchor_sizes
         
@@ -77,24 +92,24 @@ class SSD(nn.Block):
         self.stage_0, self.stage_1, self.stage_2, self.stage_3, self.stage_4, self.stage_5 = nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(), nn.Sequential()
  
 
-        #self.stage_0 = nn.Sequential() 
         backbone_1, backbone_2 = nn.Sequential(), nn.Sequential()
-        pretrained = gluon.model_zoo.vision.vgg11(pretrained=True)
-        for layer in pretrained.features[0:-15]:
+        pretrained = gluon.model_zoo.vision.vgg11(pretrained=False)
+        for layer in pretrained.features[0:-12]:
             backbone_1.add(layer)
-        for layer in pretrained.features[-15:-9]:
-            backbone_2.add(layer)
 
         self.stage_0.add( backbone_1, cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors))
-        self.stage_1.add( backbone_2)
+        self.stage_1.add(
+            INCEPTION_BLOCK(256)
+        )
         
-        self.stage_2.add( down_sample_blk(512), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        self.stage_3.add( down_sample_blk(512), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        self.stage_4.add( down_sample_blk(512), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        self.stage_5.add( down_sample_blk(512), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_2.add( down_sample_blk(128), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_3.add( down_sample_blk(128), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_4.add( down_sample_blk(128), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_5.add( down_sample_blk(128), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
         
         
-        self.stage_0[-2:].initialize(init=mx.initializer.Xavier())
+        self.stage_0.initialize(init=mx.initializer.Xavier())
+        self.stage_1.initialize(init=mx.initializer.Xavier())
         self.stage_2.initialize(init=mx.initializer.Xavier())
         self.stage_3.initialize(init=mx.initializer.Xavier())
         self.stage_4.initialize(init=mx.initializer.Xavier())
@@ -124,7 +139,7 @@ if 0:
     net = SSD(10)
     ctx = mx.gpu()
     net.collect_params().reset_ctx(ctx)
-    x = nd.zeros((32,3,256,256),ctx=ctx)
+    x = nd.zeros((32,3,300,300),ctx=ctx)
     y = net(x)
     print(y[0].shape)
     print(y[1].shape)

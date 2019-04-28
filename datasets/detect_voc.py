@@ -128,8 +128,8 @@ def load(years,batch_size):
     trainset = DETECT_VOC("trainval",years,True)
     testset = DETECT_VOC("test",years,False)
     print("train: ",len(trainset))
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover")
-    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=1)
+    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=1)
     return train_iter, test_iter, trainset._classes
 
 
