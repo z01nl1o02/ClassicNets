@@ -209,8 +209,6 @@ def test_net(net, valid_iter, ctx):
         batch_size = X.shape[0]
         out = X.as_in_context(ctx)
         out = net(out)
-        if len(out.shape)==4:
-            out = out[:,:,0,0] #replace fc with conv
         out = out.as_in_context(mx.cpu())
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
@@ -251,10 +249,7 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             out = X.as_in_context(ctx)
             with autograd.record(True):
                 out = net(out)
-                out = out.as_in_context(mx.cpu())                
-                if len(out.shape)==4:
-                    out = nd.reshape(out,(out.shape[0],out.shape[1]))
-                
+                out = out.as_in_context(mx.cpu())                 
                 loss = cls_loss(out, Y)        
            # print(out.asnumpy()[0])
            # print('loss = ',loss.sum().asscalar())
