@@ -13,7 +13,7 @@ class FIRE(nn.Block):
     def forward(self,X):
         y1 = self.squeeze_1x1(X)
         y2 = self.expand_1x1(y1)
-        y3 = self.expand_3x3(y2)
+        y3 = self.expand_3x3(y1)
         Y = nd.concat(y2,y3,dim=1) 
         return Y
 
