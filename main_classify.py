@@ -3,7 +3,8 @@ from mxnet.gluon import Trainer
 from mxnet import lr_scheduler
 from datasets import fasionmnist,classify_dataset,cifar
 from networks import alexnet,vgg,nin,googlelenet,resnet,densenet,squeezenet
-from utils import train_net,CycleScheduler
+from utils import train_net
+from tools import lr_schs
 import os,pdb
 
 if __name__=="__main__":
@@ -73,8 +74,7 @@ if __name__=="__main__":
         resize=(96,96)
     elif net_name == "squeezenet":
         net = squeezenet.load(len(class_names),(96,3,1,1))
-        #base_lr = 0.1 #must be with small lr
-	base_lr = 0.01 #must be with small lr
+        base_lr = 0.01 #must be with small lr
 
    # print(output_prefix + '.params')
     if os.path.exists( output_prefix + '.params' ):
@@ -95,9 +95,9 @@ if __name__=="__main__":
     #lr_sch.base_lr = base_lr
 
 #    lr_sch = lr_scheduler.MultiFactorScheduler(step=[10,int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1, base_lr = base_lr, warmup_steps = 0)
-    lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.1),int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1)
-    lr_sch.base_lr = base_lr
-    #lr_sch = CycleScheduler(updates_one_cycle=iter_per_epoch*5,min_lr=base_lr/100, max_lr=base_lr)
+    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.1),int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1)
+    #lr_sch.base_lr = base_lr
+    lr_sch = lr_schs.CosineScheduler(num_epochs, base_lr)
 
 #    trainer = Trainer(net.collect_params(),optimizer="adam",optimizer_params={"wd":wd,"momentum":mom})
     trainer = Trainer(net.collect_params(),optimizer="adam",optimizer_params={"wd":wd})
