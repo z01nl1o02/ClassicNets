@@ -5,13 +5,19 @@ import mxnet as mx
 import numpy as np
 
 
+def conv_layer(out_ch, ks, padding,stride):
+    layer = nn.Sequential()
+    layer.add(
+        nn.Conv2D(out_ch,ks,strides=stride,padding=padding),
+        nn.BatchNorm(),
+        nn.Activation("relu")
+    )
+    return layer
 
 def down_sample_blk(num_channels):
     blk = nn.Sequential()
     for _ in range(2):
-        blk.add(nn.Conv2D(num_channels, kernel_size=3, padding=1),
-                nn.BatchNorm(in_channels=num_channels),
-                nn.Activation('relu'))
+        blk.add( conv_layer(num_channels,ks=3,padding=1,stride=1) )
     blk.add(nn.MaxPool2D(2))
     return blk
 
@@ -70,14 +76,40 @@ def blk_forward(X, blk, size, ratio, cls_predictor, bbox_predictor):
     bbox_preds = bbox_predictor(Y) #预测边界框 （这不是上面定义的函数，而是其具体实现，即一个卷积层）
     return (Y, anchors, cls_preds, bbox_preds)
 
+
+
+
+class BACKBONE(nn.Block):
+    def __init__(self):
+        super(BACKBONE, self).__init__()
+        self.stageI = nn.Sequential()
+        self.stageI.add(
+            conv_layer(64,3,1,1),
+            nn.MaxPool2D(pool_size=3,strides=2,padding=1),
+            conv_layer(96,3,1,1),
+            nn.MaxPool2D(pool_size=3,strides=2,padding=1),
+            conv_layer(128,3,1,1),
+            nn.MaxPool2D(pool_size=3,strides=2,padding=1),
+        )
+        return
+    def forward(self, X):
+        y1 = self.stageI(X)
+        return y1
     
+def calc_anchor_sizes(ranges, num):
+    r0,r1 = ranges
+    step_size = (r1 - r0) / float(num)
+    sizes = [ (r0 + k * step_size, r0 + (k + 1) * step_size) for k in range(num)]
+    #print(sizes)
+    return sizes
+
 class SSD(nn.Block):
-    def __init__(self, num_classes, anchor_sizes = None, anchor_ratios = None, backbone="vgg-11", **kwargs):
+    def __init__(self, num_classes, anchor_sizes = None, anchor_ratios = None, backbone=None, **kwargs):
         super(SSD, self).__init__(**kwargs)
         self.num_classes = num_classes
         
         if anchor_sizes is None:
-            self.anchor_sizes = ((0.2, 0.272), (0.37, 0.447), (0.54, 0.619), (0.71, 0.79),(0.88, 0.961),(0.9,0.99))
+            self.anchor_sizes = calc_anchor_sizes((0.1,0.96),6)
         else:
             self.anchor_sizes = anchor_sizes
         
@@ -88,26 +120,23 @@ class SSD(nn.Block):
             
         self.num_anchors = len(self.anchor_sizes[0]) + len(self.anchor_ratios[0]) - 1
 
-               
         self.stage_0, self.stage_1, self.stage_2, self.stage_3, self.stage_4, self.stage_5 = nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(), nn.Sequential()
- 
 
-        backbone_1, backbone_2 = nn.Sequential(), nn.Sequential()
-        pretrained = gluon.model_zoo.vision.vgg11(pretrained=False)
-        for layer in pretrained.features[0:-12]:
-            backbone_1.add(layer)
 
-        self.stage_0.add( backbone_1, cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors))
+        backbone = BACKBONE()
+
+        self.stage_0.add( backbone, cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors))
         self.stage_1.add(
-            INCEPTION_BLOCK(256)
+            #INCEPTION_BLOCK(256)
+            conv_layer(128,3,1,1),
+            conv_layer(128,3,1,1),
         )
         
-        self.stage_2.add( down_sample_blk(128), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        self.stage_3.add( down_sample_blk(128), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        self.stage_4.add( down_sample_blk(128), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        self.stage_5.add( down_sample_blk(128), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        
-        
+        self.stage_2.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_3.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_4.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_5.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+
         self.stage_0.initialize(init=mx.initializer.Xavier())
         self.stage_1.initialize(init=mx.initializer.Xavier())
         self.stage_2.initialize(init=mx.initializer.Xavier())
@@ -134,7 +163,7 @@ class SSD(nn.Block):
         # reshape函数中的0表示保持批量大小不变
         #print(X.shape)
         return (nd.concat(*anchors, dim=1), concat_preds(cls_preds).reshape( (0, -1, self.num_classes + 1)), concat_preds(bbox_preds))
- 
+
 if 0:
     net = SSD(10)
     ctx = mx.gpu()

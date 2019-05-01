@@ -4,7 +4,7 @@ from mxnet.gluon import Trainer
 from mxnet import lr_scheduler,nd
 from datasets import detect_voc
 from networks import ssd
-from utils import train_ssd,CycleScheduler,predict_ssd
+from utils import predict_ssd
 import os,pdb,cv2
 from tools.eval_metric import VOC07MApMetric
 
@@ -23,24 +23,23 @@ ctx = mx.gpu(0)
 
 
 
-testset = detect_voc.DETECT_VOC("trainval","2007",False)
+testset = detect_voc.DETECT_VOC("test","2007",False)
 classes = testset._classes
 number_classes = len(classes)
 
 
 net = ssd.SSD(number_classes)
 import pdb
-net.load_parameters('ssd_epoch99.params')
+net.load_parameters('output/ssd_epoch299.params')
 net.collect_params().reset_ctx(ctx)
 
 
 logger.info("========ssd forward===========")
 mAP = VOC07MApMetric()
-thresh = 0.0
+thresh = 0.2
 
 for idx in range(len(testset)):
     feat,target = testset[idx]
-    print(feat.shape)
     src = testset.get_origin_image_at(idx)
     name = testset.get_name_at(idx)
     X = nd.array( np.expand_dims(feat,0) ).as_in_context(ctx)
@@ -59,8 +58,9 @@ for idx in range(len(testset)):
     labels,preds = np.expand_dims(labels,0), np.expand_dims(preds,0)
     labels,preds = mx.nd.array(labels), mx.nd.array(preds)
     mAP.update(labels,preds)
-    if idx > 0 and 0 == (idx % 100):
+    if idx > 0 and 0 == (idx % 10):
         logger.info(mAP.get())
+	break
 
 logger.info("in total:")
 logger.info(mAP.get())        
