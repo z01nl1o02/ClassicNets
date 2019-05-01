@@ -513,17 +513,7 @@ def train_and_predict_rnn_gluon(model,
 
 
 
-class CycleScheduler(lr_scheduler.LRScheduler):
-    def __init__(self,updates_one_cycle, min_lr, max_lr):
-        super(CycleScheduler,self).__init__()
-        self.updates_one_cycle = np.float32(updates_one_cycle)
-        self.min_lr = min_lr
-        self.max_lr = max_lr
-        return
-    def __call__(self,update):
-        update = update % self.updates_one_cycle
-        lr = self.min_lr + (self.max_lr - self.min_lr) * update / self.updates_one_cycle
-        return lr
+
 
 
 
