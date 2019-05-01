@@ -9,12 +9,12 @@ import os,pdb
 if __name__=="__main__":
 
     ctx = mx.gpu(0)
-    batch_size = 1000
-    num_epochs = 200
-    base_lr = 0.1
+    batch_size = 32
+    num_epochs = 500
+    base_lr = 0.0001
     wd = 0.0004
     mom = 0.9
-    resize=(35,35)
+    resize=(32,32)
     #resize = None
     net_name = "squeezenet"
     data_name = "cifar"
@@ -34,6 +34,8 @@ if __name__=="__main__":
         class_names = fasionmnist.get_class_names()
     elif data_name == "cifar":
         if net_name == "squeezenet":
+	    batch_size = 128*2 #squeezenet requires large batch_size
+	    print('update batch size to ', batch_size)
             train_iter,test_iter,class_names = cifar.load(batch_size,resize)
         else:
             train_iter,test_iter,class_names = cifar.load(batch_size)
@@ -70,8 +72,9 @@ if __name__=="__main__":
         base_lr = 0.1
         resize=(96,96)
     elif net_name == "squeezenet":
-        net = squeezenet.load(len(class_names))
-        base_lr = 0.01 #must be with small lr
+        net = squeezenet.load(len(class_names),(96,3,1,1))
+        #base_lr = 0.1 #must be with small lr
+	base_lr = 0.01 #must be with small lr
 
    # print(output_prefix + '.params')
     if os.path.exists( output_prefix + '.params' ):
@@ -91,12 +94,13 @@ if __name__=="__main__":
     #lr_sch = lr_scheduler.FactorScheduler(step=iter_per_epoch * 20, factor=0.1)
     #lr_sch.base_lr = base_lr
 
-    lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1, base_lr = base_lr, warmup_steps = 0)
-
+#    lr_sch = lr_scheduler.MultiFactorScheduler(step=[10,int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1, base_lr = base_lr, warmup_steps = 0)
+    lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.1),int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1)
+    lr_sch.base_lr = base_lr
     #lr_sch = CycleScheduler(updates_one_cycle=iter_per_epoch*5,min_lr=base_lr/100, max_lr=base_lr)
 
-    trainer = Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":wd,"momentum":mom})
-
+#    trainer = Trainer(net.collect_params(),optimizer="adam",optimizer_params={"wd":wd,"momentum":mom})
+    trainer = Trainer(net.collect_params(),optimizer="adam",optimizer_params={"wd":wd})
 
     train_net(net,train_iter,test_iter,batch_size,trainer,ctx, num_epochs, lr_sch, output_prefix)
 
