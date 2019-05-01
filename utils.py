@@ -437,7 +437,7 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             start = time.time() #restart    
 
         if (epoch + 1) % 50 == 0:
-            test_net(net,valid_iter,ctx)
+            test_ssd(net,valid_iter,ctx)
             net.save_parameters("{}_epoch{}.params".format(save_prefix,epoch))   
 
 ###########################################################
