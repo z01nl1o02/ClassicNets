@@ -12,12 +12,12 @@ if __name__=="__main__":
 
     ctx = mx.gpu(0)
     batch_size = 24
-    num_epochs = 300
-    base_lr = 0.01
-    wd = 0.0005
+    num_epochs = 200
+    base_lr = 0.1
+    wd = 0.0001
     momentum = 0.9
 
-    pretrained = ""#'output/ssd.params'
+    pretrained = 'output/ssd.params'
 
 
     output_folder = os.path.join("output")
@@ -28,13 +28,13 @@ if __name__=="__main__":
         os.makedirs(output_folder)
 
 
-    train_iter,test_iter, classes = detect_voc.load("2007_2012",batch_size)
+    train_iter,test_iter, classes = detect_voc.load("2007",batch_size)
 
     number_classes = len(classes)
 
     net = ssd.SSD(number_classes)
 
-    if pretrained != "":
+    if os.path.exists(pretrained):
         net.load_parameters(pretrained)
         print('finetune based on ',pretrained)
 
@@ -45,6 +45,8 @@ if __name__=="__main__":
     #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.45), int(num_epochs * 0.7) ], factor=0.1)
     #lr_sch.base_lr = base_lr
     lr_sch = lr_schs.CosineScheduler(num_epochs,base_lr=base_lr,warmup=10)
+    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.5)], factor=0.1)
+    #lr_sch.base_lr = base_lr
 
     trainer = Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":wd,"momentum":momentum})
 

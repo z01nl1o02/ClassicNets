@@ -3,7 +3,7 @@ classical networks with gluon
 
 
 
-# todos
+# supported
 * [x] AlexNet    
 * [x] VGG   
 * [x] NiN    
@@ -13,3 +13,15 @@ classical networks with gluon
 * [x] rnn
 * [x] fcn without bn/dropout for tiny objects
 * [x] enet
+* [x] squeezenet 
+
+# experiments
+## CIFAR-10
+
+| net | test acc  |  
+| :----: | :----: |  
+| squeezenet | 0.91 |  
+| densenet-158 | 0.95 |  
+
+
+

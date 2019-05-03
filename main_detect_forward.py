@@ -23,14 +23,14 @@ ctx = mx.gpu(0)
 
 
 
-testset = detect_voc.DETECT_VOC("test","2007",False)
+testset = detect_voc.DETECT_VOC("trainval","2007",False)
 classes = testset._classes
 number_classes = len(classes)
 
 
 net = ssd.SSD(number_classes)
 import pdb
-net.load_parameters('output/ssd_epoch299.params')
+net.load_parameters('output/ssd.params')
 net.collect_params().reset_ctx(ctx)
 
 
@@ -58,7 +58,7 @@ for idx in range(len(testset)):
     labels,preds = np.expand_dims(labels,0), np.expand_dims(preds,0)
     labels,preds = mx.nd.array(labels), mx.nd.array(preds)
     mAP.update(labels,preds)
-    if idx > 0 and 0 == (idx % 10):
+    if idx > 0 and 0 == (idx % 100):
         logger.info(mAP.get())
 	break
 

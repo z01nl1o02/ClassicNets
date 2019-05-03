@@ -294,24 +294,66 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
 ##############################################################
 ##ssd
 
-
-def calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
+def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
     bbox_loss = gluon.loss.L1Loss()
-    cls = cls_loss(cls_preds, cls_labels)
+    #print(cls_preds.shape, cls_labels.shape)
+
+    batch_size,anchor_size,cls_num = cls_preds.shape
+    cls_preds_ = nd.reshape(cls_preds, (-1,cls_preds.shape[-1]))
+    cls_labels_ = nd.reshape(cls_labels, (-1,1))    
+    cls_mask = (cls_labels_[:,0] >= 0).reshape( cls_labels_.shape  )
+
+    
+    #cls_mask = (cls_labels >= 0).reshape( (cls_labels.shape[0],cls_labels.shape[1],1) )
+    #print(cls_preds_.shape, cls_labels_.shape)
+    cls = cls_loss(cls_preds_, cls_labels_,cls_mask)        
+    #print(cls.shape, cls_mask.shape)
+    #print(cls.asnumpy())
     bbox = bbox_loss(bbox_preds * bbox_masks, bbox_labels * bbox_masks)
-    return cls + bbox
+    
+    cls = nd.reshape(cls,(len(bbox),-1)).mean(axis=-1)
+    
+    return (cls + bbox).sum()
 
-def cls_eval(cls_preds, cls_labels):
-    # 由于类别预测结果放在最后一维，argmax需要指定最后一维
-    return (cls_preds.argmax(axis=-1) == cls_labels).sum().asscalar()
 
-def bbox_eval(bbox_preds, bbox_labels, bbox_masks):
+
+
+#def calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
+#    cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
+#    bbox_loss = gluon.loss.L1Loss()
+    #if cls_labels.max().asscalar() > 20:
+    #	print(cls_labels.max().asscalar(), cls_labels.min().asscalar())
+    #pdb.set_trace()
+    #inds = nd.where( cls_labels < 0 )[0]
+    #output = np.delete(cls_labels, inds, axis=0)
+    #pdb.set_trace()
+#    cls = cls_loss(cls_preds, cls_labels)
+#    bbox = bbox_loss(bbox_preds * bbox_masks, bbox_labels * bbox_masks)
+#    return cls + bbox
+
+def ssd_cls_eval(cls_preds, cls_labels): 
+    batch_size,anchor_size,cls_num = cls_preds.shape
+    cls_preds_ = nd.reshape(cls_preds, (-1,cls_preds.shape[-1]))
+    cls_labels_ = nd.reshape(cls_labels, (-1,1))    
+    cls_mask = (cls_labels_[:,0] >= 0).reshape( cls_labels_.shape  )
+    cls_pred_labels = cls_preds_.argmax(axis=-1).reshape( (batch_size * anchor_size, 1)  )
+    #pdb.set_trace()
+    cls = (cls_pred_labels == cls_labels_) * cls_mask
+    cls = nd.reshape( cls, (batch_size,-1) ).mean().asnumpy()[0]
+    return cls
+
+#def cls_eval(cls_preds, cls_labels):
+#    # 由于类别预测结果放在最后一维，argmax需要指定最后一维
+#    return (cls_preds.argmax(axis=-1) == cls_labels).sum().asscalar()
+
+def ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks):
    # print (bbox_labels*bbox_masks)
   #  print (bbox_preds*bbox_masks).sum()
-    return ((bbox_labels - bbox_preds) * bbox_masks).abs().sum().asscalar()
+    bbox_score = ((bbox_labels - bbox_preds) * bbox_masks).asnumpy()
+    bbox_score = np.abs(bbox_score).mean()
+    return bbox_score
   
-import pdb
 def predict_ssd(net,X):
     anchors, cls_preds, bbox_preds = net(X)
     cls_probs = cls_preds.softmax().transpose((0, 2, 1))
@@ -324,7 +366,7 @@ def predict_ssd(net,X):
     
 def test_ssd(net, valid_iter, ctx):
     start = time.time()
-    acc_sum, mae_sum, n, m = 0.0, 0.0, 0, 0
+    acc_hist,mae_hist = [],[]
     loss_hist = []
     for batch in valid_iter:        
         X = batch[0].as_in_context(ctx)
@@ -335,16 +377,16 @@ def test_ssd(net, valid_iter, ctx):
         bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
             anchors, Y, cls_preds.transpose((0, 2, 1)))
         # 根据类别和偏移量的预测和标注值计算损失函数
-        l = calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
+        l = ssd_calc_loss(cls_preds, cls_labels + 1, bbox_preds, bbox_labels,
                       bbox_masks)
         loss_hist.append( l.asnumpy()[0] / X.shape[0] )
-        acc_sum += cls_eval(cls_preds, cls_labels)
-        n += cls_labels.size
-        mae_sum += bbox_eval(bbox_preds, bbox_labels, bbox_masks)
-        m += bbox_labels.size
+        acc_hist.append( ssd_cls_eval(cls_preds, cls_labels) )
+        mae_hist.append( ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks) )
     loss = np.asarray(loss_hist).mean()
+    acc = np.mean(acc_hist)
+    mae = np.mean(mae_hist)
     logger.info('\t test class err %.5e, bbox mae %.5e, loss %.5e, time %.1f sec' % ( 
-        1 - acc_sum / n, mae_sum / m, loss, time.time() - start))
+        1 - acc, mae, loss, time.time() - start))
     return
     
     
@@ -352,7 +394,7 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
     logger.info("===================START TRAINING====================")
     start = time.time()
     for epoch in range(num_epochs):
-        acc_sum, mae_sum, n, m = 0.0, 0.0, 0, 0
+        acc_hist, mae_hist = [],[]
         loss_hist = []
         trainer.set_learning_rate(lr_sch(epoch))
         for batch in train_iter:        
@@ -363,7 +405,7 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
                 anchors, cls_preds, bbox_preds = net(X)
                 # 为每个锚框标注类别和偏移量
                 bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
-                    anchors, Y, cls_preds.transpose((0, 2, 1)))
+                    anchors, Y, cls_preds.transpose((0, 2, 1)), negative_mining_ratio = 3.0)
                 if 0:
                     img = np.transpose( X[0].asnumpy(), (1,2,0) )
                     img = np.uint8(img * 255)
@@ -414,21 +456,22 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
 
 
                 # 根据类别和偏移量的预测和标注值计算损失函数
-                l = calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
+                l = ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
                               bbox_masks)
             l.backward()
             trainer.step(batch_size)
-            #nd.waitall()
+            nd.waitall()
             loss_hist.append( l.asnumpy()[0] / batch_size )
-            acc_sum += cls_eval(cls_preds, cls_labels)
-            n += cls_labels.size
-            mae_sum += bbox_eval(bbox_preds, bbox_labels, bbox_masks)
-            m += bbox_labels.size
+            acc_hist.append( ssd_cls_eval(cls_preds, cls_labels) )
+            mae_hist.append( ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks) )
+            #pdb.set_trace()
 
         if (epoch + 1)%2 == 0:
             loss = np.asarray(loss_hist).mean()
+            acc = np.mean(acc_hist)
+            mae = np.mean(mae_hist)
             logger.info('epoch %2d, class err %.5e, bbox mae %.5e, loss %.5e, lr %.5e time %.1f sec' % (
-                epoch + 1, 1 - acc_sum / n, mae_sum / m, loss, trainer.learning_rate, time.time() - start))
+                epoch + 1, acc, mae, loss, trainer.learning_rate, time.time() - start))
             start = time.time() #restart    
 
         if (epoch + 1) % 50 == 0:
