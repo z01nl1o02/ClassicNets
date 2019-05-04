@@ -3,6 +3,7 @@ from mxnet import contrib, image, nd,gluon,autograd, init
 from mxnet.gluon import loss as gloss, nn
 import mxnet as mx
 import numpy as np
+from mxnet.gluon.model_zoo import vision
 
 
 def conv_layer(out_ch, ks, padding,stride):
@@ -77,24 +78,41 @@ def blk_forward(X, blk, size, ratio, cls_predictor, bbox_predictor):
     return (Y, anchors, cls_preds, bbox_preds)
 
 
+def get_resnet_34():
+    pretrained = vision.resnet34_v1(pretrained=True)
+    #pretrained_2 = resnet34_v1(pretrained=True, ctx=self.ctx)
+    #first_weights = pretrained_2.features[0].weight.data().mean(
+    #    axis=1).expand_dims(axis=1)
 
+    body = gluon.nn.Sequential()
+    with body.name_scope():
+        #first_layer = gluon.nn.Conv2D(channels=64, kernel_size=(7, 7), padding=(
+        #    3, 3), strides=(2, 2), in_channels=1, use_bias=False)
+        #first_layer.initialize(mx.init.Normal(), ctx=self.ctx)
+        #first_layer.weight.set_data(first_weights)
+        #body.add(first_layer)
+        body.add(*pretrained.features[0:-3])
+    return body
 
 class BACKBONE(nn.Block):
-    def __init__(self):
+    def __init__(self,name=""):
         super(BACKBONE, self).__init__()
-        self.stageI = nn.Sequential()
-        self.stageI.add(
-            conv_layer(64,3,1,1),
-            nn.MaxPool2D(pool_size=3,strides=2,padding=1),
-            conv_layer(96,3,1,1),
-            nn.MaxPool2D(pool_size=3,strides=2,padding=1),
-            conv_layer(128,3,1,1),
-            nn.MaxPool2D(pool_size=3,strides=2,padding=1),
-        )
+        if name == "resnet34":
+            self.stage = get_resnet_34()
+        else:
+            self.stage = nn.Sequential()
+            self.stage.add(
+                conv_layer(64,3,1,1),
+                nn.MaxPool2D(pool_size=3,strides=2,padding=1),
+                conv_layer(96,3,1,1),
+                nn.MaxPool2D(pool_size=3,strides=2,padding=1),
+                conv_layer(128,3,1,1),
+                nn.MaxPool2D(pool_size=3,strides=2,padding=1),
+            )
         return
     def forward(self, X):
-        y1 = self.stageI(X)
-        return y1
+        y = self.stage(X)
+        return y
     
 def calc_anchor_sizes(ranges, num):
     r0,r1 = ranges
@@ -122,8 +140,15 @@ class SSD(nn.Block):
 
         self.stage_0, self.stage_1, self.stage_2, self.stage_3, self.stage_4, self.stage_5 = nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(), nn.Sequential()
 
-
-        backbone = BACKBONE()
+        backbone_name = "resnet34"
+        backbone = BACKBONE(backbone_name)
+        if backbone_name == "":
+            backbone.initialize(init=mx.initializer.Xavier())
+            print("using custom backbone")
+        else:
+            print("using pretrained backbone:",backbone_name)
+            backbone.collect_params().setattr("lr_mult",0.1)
+                
 
         self.stage_0.add( backbone, cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors))
         self.stage_1.add(
@@ -137,7 +162,9 @@ class SSD(nn.Block):
         self.stage_4.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
         self.stage_5.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
 
-        self.stage_0.initialize(init=mx.initializer.Xavier())
+        #self.stage_0[0].initialize(init=mx.initializer.Xavier())
+        self.stage_0[1].initialize(init=mx.initializer.Xavier())
+        self.stage_0[2].initialize(init=mx.initializer.Xavier())
         self.stage_1.initialize(init=mx.initializer.Xavier())
         self.stage_2.initialize(init=mx.initializer.Xavier())
         self.stage_3.initialize(init=mx.initializer.Xavier())

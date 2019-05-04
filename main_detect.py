@@ -11,7 +11,7 @@ import os,pdb,cv2
 if __name__=="__main__":
 
     ctx = mx.gpu(0)
-    batch_size = 24
+    batch_size = 16+8
     num_epochs = 500
     base_lr = 0.1
     wd = 0.0001
