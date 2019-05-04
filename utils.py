@@ -357,7 +357,7 @@ def ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks):
 def predict_ssd(net,X):
     anchors, cls_preds, bbox_preds = net(X)
     cls_probs = cls_preds.softmax().transpose((0, 2, 1))
-    output = contrib.nd.MultiBoxDetection(cls_probs, bbox_preds, anchors,nms_topk = 400)
+    output = contrib.nd.MultiBoxDetection(cls_probs, bbox_preds, anchors,nms_topk = -1, force_suppress=True)
     idx = [i for i, row in enumerate(output[0]) if row[0].asscalar() != -1]
     if len(idx) < 1:
         return mx.nd.zeros((1,output.shape[-1])) - 1
@@ -377,7 +377,7 @@ def test_ssd(net, valid_iter, ctx):
         bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
             anchors, Y, cls_preds.transpose((0, 2, 1)))
         # 根据类别和偏移量的预测和标注值计算损失函数
-        l = ssd_calc_loss(cls_preds, cls_labels + 1, bbox_preds, bbox_labels,
+        l = ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
                       bbox_masks)
         loss_hist.append( l.asnumpy()[0] / X.shape[0] )
         acc_hist.append( ssd_cls_eval(cls_preds, cls_labels) )

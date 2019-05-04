@@ -12,7 +12,7 @@ if __name__=="__main__":
 
     ctx = mx.gpu(0)
     batch_size = 24
-    num_epochs = 200
+    num_epochs = 500
     base_lr = 0.1
     wd = 0.0001
     momentum = 0.9
@@ -28,7 +28,7 @@ if __name__=="__main__":
         os.makedirs(output_folder)
 
 
-    train_iter,test_iter, classes = detect_voc.load("2007",batch_size)
+    train_iter,test_iter, classes = detect_voc.load("2007_2012",batch_size)
 
     number_classes = len(classes)
 

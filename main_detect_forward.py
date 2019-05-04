@@ -23,7 +23,7 @@ ctx = mx.gpu(0)
 
 
 
-testset = detect_voc.DETECT_VOC("trainval","2007",False)
+testset = detect_voc.DETECT_VOC("test","2007",False)
 classes = testset._classes
 number_classes = len(classes)
 
@@ -60,7 +60,7 @@ for idx in range(len(testset)):
     mAP.update(labels,preds)
     if idx > 0 and 0 == (idx % 100):
         logger.info(mAP.get())
-	break
+	#break
 
 logger.info("in total:")
 logger.info(mAP.get())        
