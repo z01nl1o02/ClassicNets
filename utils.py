@@ -294,7 +294,8 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
 ##############################################################
 ##ssd
 
-def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
+
+def ssd_calc_loss_slow(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
     bbox_loss = gluon.loss.L1Loss()
     #print(cls_preds.shape, cls_labels.shape)
@@ -304,18 +305,44 @@ def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
     cls_labels_ = nd.reshape(cls_labels, (-1,1))    
     cls_mask = (cls_labels_[:,0] >= 0).reshape( cls_labels_.shape  )
 
-    
-    #cls_mask = (cls_labels >= 0).reshape( (cls_labels.shape[0],cls_labels.shape[1],1) )
-    #print(cls_preds_.shape, cls_labels_.shape)
-    cls = cls_loss(cls_preds_, cls_labels_,cls_mask)        
-    #print(cls.shape, cls_mask.shape)
-    #print(cls.asnumpy())
+
+    cls = cls_loss(cls_preds_, cls_labels_,cls_mask)
     bbox = bbox_loss(bbox_preds * bbox_masks, bbox_labels * bbox_masks)
     
     cls = nd.reshape(cls,(len(bbox),-1)).mean(axis=-1)
     
     return (cls + bbox).sum()
 
+def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
+    cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
+    bbox_loss = gluon.loss.L1Loss()
+    #print(cls_preds.shape, cls_labels.shape)
+
+    batch_size,anchor_size,cls_num = cls_preds.shape
+    cls_preds_ = nd.reshape(cls_preds, (-1,cls_preds.shape[-1]))
+    cls_labels_ = nd.reshape(cls_labels, (-1,1))
+    cls_mask = (cls_labels_[:,0] >= 0).reshape( cls_labels_.shape  )
+
+    indices =  nd.array( np.where( cls_mask.asnumpy() > 0)[0], ctx = cls_preds.context )
+
+    cls_preds_valid = nd.take(cls_preds_, indices)
+    cls_labels_valid = nd.take(cls_labels_, indices)
+    cls = cls_loss(cls_preds_valid, cls_labels_valid)
+
+
+    bbox_labels = nd.reshape(bbox_labels, (-1,4))
+    bbox_masks = nd.sum( nd.reshape(bbox_masks,(-1,4)), axis = -1)
+    bbox_preds = nd.reshape(bbox_preds,(-1,4))
+
+
+    indices =  nd.array( np.where( bbox_masks.asnumpy() > 0)[0], ctx = bbox_preds.context )
+
+    bbox_labels_valid = nd.take(bbox_labels, indices)
+    bbox_preds_valid = nd.take(bbox_preds, indices)
+    bbox = bbox_loss(bbox_preds_valid, bbox_labels_valid)
+
+
+    return (cls.mean() + bbox.mean()) * batch_size
 
 
 
