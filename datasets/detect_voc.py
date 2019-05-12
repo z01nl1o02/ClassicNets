@@ -95,8 +95,80 @@ class DETECT_VOC(gluon.data.Dataset):
         image_path, xml_path = self._paths[idx]
         img = cv2.imread(image_path,1)
         return img
+    #https://mxnet.incubator.apache.org/api/python/image/image.html
+    #https://mxnet.incubator.apache.org/versions/master/tutorials/python/types_of_data_augmentation.html?highlight=contrastjitteraug
+    def BrightnessJitterAug(self, img, brightness = 0.5):
+        img = img.astype(np.float32)
+        alpha = 1.0 + random.uniform(-brightness, brightness)
+        return np.clip(img * alpha,0,255)
+    def ContrastJitterAug(self,img,contrast = 0.5):
+        coef = np.asarray(  [[[0.299,0.587,0.114]]]    )
+        alpha = 1.0 + random.uniform(-contrast, contrast)
+        gray = img * coef
+        gray = (3.0*(1.0-alpha) / gray.size) * np.sum(gray)
+        img *= alpha
+        img += gray
+        return np.clip(img,0,255)
+    def SaturationJitterAug(self,src,saturation=0.5):
+        coef = np.asarray(  [[[0.299,0.587,0.114]]]    )
+        alpha = 1.0 + random.uniform(-saturation, saturation)
+        gray = src * coef
+        gray = np.sum(gray, axis=2,keepdims=True)
+        gray *= (1.0 - alpha)
+        src *= alpha
+        src += gray
+        return np.clip(src,0,255)
+    def HueJitterAug(self,src, hue = 0.5):
+        tyiq = np.array([[0.299, 0.587, 0.114],
+                              [0.596, -0.274, -0.321],
+                              [0.211, -0.523, 0.311]])
+        ityiq = np.array([[1.0, 0.956, 0.621],
+                               [1.0, -0.272, -0.647],
+                               [1.0, -1.107, 1.705]])
 
-	   
+        alpha = random.uniform(-hue, hue)
+        u = np.cos(alpha * np.pi)
+        w = np.sin(alpha * np.pi)
+        bt = np.array([[1.0, 0.0, 0.0],
+                       [0.0, u, -w],
+                       [0.0, w, u]])
+        t = np.dot(np.dot(ityiq, bt), tyiq).T
+        src = np.dot(src, np.array(t))
+        return np.clip(src,0,255)
+
+    def RandomGrayAug(self,src):
+        mat = np.array([[0.21, 0.21, 0.21],
+                             [0.72, 0.72, 0.72],
+                             [0.07, 0.07, 0.07]])
+        src = np.dot(src,mat)
+        return np.clip(src,0,255)
+    def SmoothAug(self,src):
+        sigmaX, sigmaY = random.random() + 0.5, random.random() + 0.5
+        src = cv2.GaussianBlur(src,(5,5),sigmaX,sigmaY).astype(np.float32)
+        return src
+    def data_aug_shuffle(self,src,p = 0.5):
+        src = src.astype(np.float32)
+#        cv2.imshow("aug-0",np.uint8(src))
+        if random.random() < p:
+            src = self.BrightnessJitterAug(src)
+            #cv2.imshow("aug-1",np.uint8(src))
+        if random.random() < p:
+            src = self.ContrastJitterAug(src)
+ #           cv2.imshow("aug-2",np.uint8(src))
+        if random.random() < p:
+            src = self.SaturationJitterAug(src)
+  #          cv2.imshow("aug-3",np.uint8(src))
+        if random.random() < p:
+            src = self.HueJitterAug(src)
+   #         cv2.imshow("aug-4",np.uint8(src))
+        if random.random() < p:
+            src = self.SmoothAug(src)
+    #        cv2.imshow("aug-5",np.uint8(src))
+        if random.random() < p:
+            src = self.RandomGrayAug(src)
+     #       cv2.imshow("aug-6",np.uint8(src))
+        return src
+
     def __getitem__(self,idx):
         image_path, xml_path = self._paths[idx]
         targets = self._load_pascal_annotation(xml_path)
@@ -107,16 +179,16 @@ class DETECT_VOC(gluon.data.Dataset):
                               cv2.INTER_NEAREST, cv2.INTER_LANCZOS4]
         else:
             interp_methods = [cv2.INTER_LINEAR]
-        interp_method = interp_methods[int(np.random.uniform(0, 1) * len(interp_methods))]              
-        img = cv2.resize(img,self._resize,interp_method)
-        #pdb.set_trace()
+        interp_method = interp_methods[int(np.random.uniform(0, 1) * len(interp_methods))]
+        img = cv2.resize(img, self._resize, interp_method)
         if self._fortrain:
-            if np.random.uniform(0, 1) > 0.5:
+            if np.random.uniform(0, 1) > 0.5: #flip
                 img = cv2.flip(img, 1)
                 tmp = 1.0 - targets[:, 1]
                 targets[:, 1] = 1.0 - targets[:, 3]
                 targets[:, 3] = tmp
-        
+            img = self.data_aug_shuffle(img,0.5)
+
         img = np.transpose(img,(2,0,1))
         img = np.float32(img) / 255
         return img,targets
@@ -128,8 +200,8 @@ def load(years,batch_size):
     trainset = DETECT_VOC("trainval",years,True)
     testset = DETECT_VOC("test",years,False)
     print("train: ",len(trainset))
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=1)
-    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=1)
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=-1)
+    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=-1)
     return train_iter, test_iter, trainset._classes
 
 
@@ -147,10 +219,9 @@ if 0:
             cls,x0,y0,x1,y1 = (target * np.array([1,W,H,W,H])).astype(np.int32)
             if cls < 0:
                 continue 
-            #print(cls,x0,x1,y0,y1,img.shape)
             cv2.rectangle(img,(x0,y0),(x1,y1),(255,255,0), 2)
         cv2.imshow("vis",img)
-        cv2.waitKey(5000)
+        cv2.waitKey(2000)
     
     
 
