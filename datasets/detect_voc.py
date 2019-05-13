@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import random
 import xml.etree.ElementTree as ET
-
+import math
 
 class DETECT_VOC(gluon.data.Dataset):
     def __init__(self, image_set, years, fortrain,resize = (300,300), devkit_path='/home/c001/data/VOCdevkit/'):
@@ -146,28 +146,124 @@ class DETECT_VOC(gluon.data.Dataset):
         sigmaX, sigmaY = random.random() + 0.5, random.random() + 0.5
         src = cv2.GaussianBlur(src,(5,5),sigmaX,sigmaY).astype(np.float32)
         return src
-    def data_aug_shuffle(self,src,p = 0.5):
+    def BatchSample(self,src,bbox):
+        H,W,C = src.shape
+        min_ious = [0.1,0.3,0.5,0.7,0.9]
+        r = random.randint(0, len(min_ious) - 1)
+        iou_thresh = min_ious[r]
+        valid_bbox_indices = (bbox[:,0] >= 0)
+        for _ in range(50):
+            scale = random.uniform(0.3,1.)
+            min_ratio,max_ratio = max(0.5, scale*scale), min(2, 1./scale/scale)
+            ratio = math.sqrt(random.uniform(min_ratio,max_ratio))
+            newW,newH = int(scale * ratio * W), int(scale / ratio * H)
+            left,top = random.randint(0,W - newW), random.randint(0, H-newH)
+            roi = np.array( [left,top, left + newW, top + newH]   ) / np.array([W,H,W,H])
+            ious = []
+            for (cls,x0,y0,x1,y1) in bbox[valid_bbox_indices]:
+                l,t = max(x0,roi[0]),max(y0,roi[1])
+                r,b = min(x1,roi[2]), min(y1,roi[3])
+                w,h = r - l, b - t
+                if w < 0 or h < 0:
+                    ious.append(-1)
+                else:
+                    ious.append( (newW * newH * 1.0 / W / H + (x1-x0) * (y1-y0)  -  w * h) * 1.0 / (x1-x0 + 1) / (y1-y0+1) )
+            if np.max(ious) <  iou_thresh:
+                continue
+            centers = (bbox[:,1:3] + bbox[:,3:]) / 2.
+            indices = np.logical_and(centers < roi[2:], centers > roi[:2]).all(axis=1)
+            if len(bbox[indices]) < 1:
+                continue
+            indices = np.logical_not( np.logical_and(valid_bbox_indices, indices) )
+
+            #vis = src.copy().astype(np.uint8)
+            #for (cls, x0,y0,x1,y1) in bbox:
+            #    if cls < 0:
+            #        continue
+            #    x0,y0,x1,y1 = (np.asarray([x0,y0,x1,y1]) * np.asarray([W,H,W,H])).astype(np.int32)
+            #    cv2.rectangle(vis,(x0,y0),(x1,y1),(255,0,0),3)
+
+            bbox = bbox * np.array([1,W,H,W,H])
+            roi *= np.array([W,H,W,H])
+            roi = roi.astype(np.int32)
+            #print(bbox[0], roi)
+            bbox[:,1:3] = np.maximum(bbox[:,1:3], roi[:2])
+            bbox[:,1:3] -= roi[:2]
+            bbox[:,3:] = np.minimum(bbox[:,3:], roi[2:])
+            bbox[:,3:] -= roi[:2]
+            #print(bbox[0], roi)
+            bbox[indices] = -1
+
+
+
+            #cv2.rectangle(vis,(roi[0],roi[1]), (roi[2],roi[3]), (0,0,255),2)
+            #cv2.imshow("src",vis)
+
+            src = src[roi[1]:roi[3], roi[0]:roi[2],:]
+
+
+            H,W,C = src.shape
+            bbox = (bbox / np.array([1,W,H,W,H])).astype(np.float32)
+           # vis = src.copy().astype(np.uint8)
+           # for (cls, x0,y0,x1,y1) in bbox:
+           #     if cls < 0:
+           #         continue
+           #     x0,y0,x1,y1 = (np.asarray([x0,y0,x1,y1]) * np.asarray([W,H,W,H])).astype(np.int32)
+           #     print(x0,y0,x1,y1)
+           #     cv2.rectangle(vis,(x0,y0),(x1,y1),(255,0,0),3)
+           # cv2.imshow("src-2",vis)
+            break
+        return src,bbox
+
+
+
+    def ExpandImage(self,src, bbox):
+        H,W,C = src.shape
+        for _ in range(50):
+            scale = random.uniform(1,4)
+            min_ratio = max(0.5, 1./scale/scale)
+            max_ratio = min(2, scale * scale)
+            ratio = math.sqrt(random.uniform(min_ratio, max_ratio))
+            ws,hs = scale * ratio, scale/ratio
+            if ws < 1 or hs < 1:
+                continue
+            newW,newH = int(ws * W), int(hs * H)
+
+            left, top = random.randint(0, newW - W) , random.randint(0, newH - H)
+            bbox[:,1:]  = bbox[:,1:] * np.array([W,H,W,H])
+            bbox[:,1:3] = bbox[:,1:3] + np.array([left,top])
+            bbox[:,3:] = bbox[:,3:] + np.array([left,top])
+
+            expand_image = np.zeros((newH,newW,C), dtype=np.float32) + src.mean()
+            expand_image[top:top+H, left:left+W,:] = src
+
+            src = expand_image
+            bbox[:,1:]  = bbox[:,1:] / np.array([newW,newH,newW,newH])
+            mask = (bbox[:,0] < 0)
+            bbox[mask] = -1
+            bbox = bbox.astype(np.float32)
+            break
+        return src,bbox
+
+    def data_aug_shuffle(self,src,bbox,p = 0.5):
         src = src.astype(np.float32)
-#        cv2.imshow("aug-0",np.uint8(src))
         if random.random() < p:
             src = self.BrightnessJitterAug(src)
-            #cv2.imshow("aug-1",np.uint8(src))
         if random.random() < p:
             src = self.ContrastJitterAug(src)
- #           cv2.imshow("aug-2",np.uint8(src))
         if random.random() < p:
             src = self.SaturationJitterAug(src)
-  #          cv2.imshow("aug-3",np.uint8(src))
         if random.random() < p:
             src = self.HueJitterAug(src)
-   #         cv2.imshow("aug-4",np.uint8(src))
         if random.random() < p:
             src = self.SmoothAug(src)
-    #        cv2.imshow("aug-5",np.uint8(src))
         if random.random() < p:
             src = self.RandomGrayAug(src)
-     #       cv2.imshow("aug-6",np.uint8(src))
-        return src
+        if random.random() < p:
+            src,bbox = self.ExpandImage(src,bbox)
+        if random.random() < p:
+            src,bbox = self.BatchSample(src,bbox)
+        return src,bbox
 
     def __getitem__(self,idx):
         image_path, xml_path = self._paths[idx]
@@ -175,22 +271,25 @@ class DETECT_VOC(gluon.data.Dataset):
         img = cv2.imread(image_path,1)
 
         if self._fortrain:
+            if np.random.uniform(0, 1) > 0.5: #flip
+                img = cv2.flip(img, 1)
+                tmp = 1.0 - targets[:, 1]
+                targets[:, 1] = 1.0 - targets[:, 3]
+                targets[:, 3] = tmp
+            img,targets = self.data_aug_shuffle(img,targets,0.5)
+
+        img = img.astype(np.uint8)
+        if self._fortrain:
             interp_methods = [cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_AREA, \
                               cv2.INTER_NEAREST, cv2.INTER_LANCZOS4]
         else:
             interp_methods = [cv2.INTER_LINEAR]
         interp_method = interp_methods[int(np.random.uniform(0, 1) * len(interp_methods))]
         img = cv2.resize(img, self._resize, interp_method)
-        if self._fortrain:
-            if np.random.uniform(0, 1) > 0.5: #flip
-                img = cv2.flip(img, 1)
-                tmp = 1.0 - targets[:, 1]
-                targets[:, 1] = 1.0 - targets[:, 3]
-                targets[:, 3] = tmp
-            img = self.data_aug_shuffle(img,0.5)
 
         img = np.transpose(img,(2,0,1))
         img = np.float32(img) / 255
+        #print(img.dtype, targets.dtype)
         return img,targets
         
         
@@ -221,7 +320,7 @@ if 0:
                 continue 
             cv2.rectangle(img,(x0,y0),(x1,y1),(255,255,0), 2)
         cv2.imshow("vis",img)
-        cv2.waitKey(2000)
+        cv2.waitKey(-2000)
     
     
 
