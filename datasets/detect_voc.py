@@ -234,7 +234,10 @@ class DETECT_VOC(gluon.data.Dataset):
             bbox[:,1:3] = bbox[:,1:3] + np.array([left,top])
             bbox[:,3:] = bbox[:,3:] + np.array([left,top])
 
-            expand_image = np.zeros((newH,newW,C), dtype=np.float32) + src.mean()
+            expand_image = np.zeros((newH,newW,C), dtype=np.float32)
+            expand_image[:,:,0] =  src[:,:,0].mean()
+            expand_image[:,:,1] =  src[:,:,1].mean()
+            expand_image[:,:,2] =  src[:,:,2].mean()
             expand_image[top:top+H, left:left+W,:] = src
 
             src = expand_image
