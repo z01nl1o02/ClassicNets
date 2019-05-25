@@ -17,9 +17,16 @@ from mxnet import contrib
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(level = logging.INFO)
+
 handler = logging.FileHandler("log.txt")
 handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
@@ -238,6 +245,7 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
         trainer.set_learning_rate(lr_sch(epoch))
         for batch in train_iter:
             iter_num += 1
+           # print("iter ",iter_num," start")
             if isinstance(batch,mx.io.DataBatch):
                 X,Y = batch.data[0],batch.label[0]
                 #total += X.shape[0]
@@ -246,10 +254,11 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
                 X,Y = batch
             #print(X.shape,Y.shape)
             #print(Y)
-            out = X.as_in_context(ctx)
+            X = X.as_in_context(ctx)
+            Y = Y.as_in_context(ctx)
             with autograd.record(True):
-                out = net(out)
-                out = out.as_in_context(mx.cpu())                 
+                out = net(X)
+                #out = out.as_in_context(mx.cpu())                 
                 loss = cls_loss(out, Y)        
            # print(out.asnumpy()[0])
            # print('loss = ',loss.sum().asscalar())
@@ -258,6 +267,7 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             trainer.step(batch_size)
             cls_acc.update(Y,out)
             nd.waitall()
+            #print("iter ",iter_num," end")
             if use_mxboard:
                 if iter_num % 100 == 0:
                     sw.add_scalar(tag='train_loss', value=loss.mean().asscalar(), global_step=iter_num)
