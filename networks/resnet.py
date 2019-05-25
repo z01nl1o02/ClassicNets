@@ -33,6 +33,16 @@ def resnet_block(num_channels, num_residuals, first_block=False):
                 Residual(num_channels)
             )
     return blk
+    
+def resnetN(num_classes,N=3):
+    net = nn.Sequential()
+    net.add(
+        nn.Conv2D(16,kernel_size=3,strides=1,padding=1),
+        nn.BatchNorm(), nn.Activation("relu"))
+    net.add( resnet_block(16,N,True), resnet_block(32,N), resnet_block(64,N) )
+    net.add( nn.GlobalAvgPool2D(), nn.Dense(num_classes))
+    return net
+        
 
 def resnet_18(num_classes):
     net = nn.Sequential()
@@ -127,14 +137,20 @@ def load(type,num_classes):
         net.initialize(init=mx.initializer.Xavier())
         net.hybridize()
         return net
+    if type == "resnet-N":
+        #cifar-10
+        net = resnetN(num_classes,3)
+        net.initialize(init=mx.initializer.Xavier())
+        return net
     return None
 
 
 if 0:
     ctx = mx.gpu()
-    X = nd.random.uniform(0,1,(1,3,224,224),ctx=ctx)
-    net = load("resnet-18",10)
-    net.initialize(ctx=ctx)
+    X = nd.random.uniform(0,1,(1,3,32,32),ctx=ctx)
+    net = load("resnet-N",10)
+    #net.initialize(ctx=ctx)
+    net.collect_params().reset_ctx(ctx)
     Y = X
     for layer in net:
         Y = layer(Y)
