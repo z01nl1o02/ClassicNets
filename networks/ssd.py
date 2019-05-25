@@ -94,11 +94,29 @@ def get_resnet_34():
         body.add(*pretrained.features[0:-3])
     return body
 
+def get_resnet_50():
+    pretrained = vision.resnet50_v1(pretrained=True)
+    #pretrained_2 = resnet34_v1(pretrained=True, ctx=self.ctx)
+    #first_weights = pretrained_2.features[0].weight.data().mean(
+    #    axis=1).expand_dims(axis=1)
+    #print(pretrained.features[-4])
+    body = gluon.nn.Sequential()
+    with body.name_scope():
+        #first_layer = gluon.nn.Conv2D(channels=64, kernel_size=(7, 7), padding=(
+        #    3, 3), strides=(2, 2), in_channels=1, use_bias=False)
+        #first_layer.initialize(mx.init.Normal(), ctx=self.ctx)
+        #first_layer.weight.set_data(first_weights)
+        #body.add(first_layer)
+        body.add(*pretrained.features[0:-3])
+    return body
+
 class BACKBONE(nn.Block):
     def __init__(self,name=""):
         super(BACKBONE, self).__init__()
         if name == "resnet34":
             self.stage = get_resnet_34()
+        if name == "resnet50":
+            self.stage = get_resnet_50()
         else:
             self.stage = nn.Sequential()
             self.stage.add(
@@ -140,7 +158,7 @@ class SSD(nn.Block):
 
         self.stage_0, self.stage_1, self.stage_2, self.stage_3, self.stage_4, self.stage_5 = nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(), nn.Sequential()
 
-        backbone_name = "resnet34"
+        backbone_name = "resnet50"
         backbone = BACKBONE(backbone_name)
         if backbone_name == "":
             backbone.initialize(init=mx.initializer.Xavier())
