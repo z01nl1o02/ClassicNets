@@ -70,7 +70,7 @@ class CIFAR(gluon.data.Dataset):
 def load(batch_size, resize = None):
     trainset = CIFAR(True,resize)
     testset = CIFAR(False,resize)
-    train_iter = gluon.data.DataLoader(trainset, batch_size, shuffle=True, last_batch="rollover",num_workers=3)
+    train_iter = gluon.data.DataLoader(trainset, batch_size, shuffle=False, last_batch="rollover",num_workers=3)
     test_iter = gluon.data.DataLoader(trainset, batch_size, shuffle=False, last_batch="rollover",num_workers=3)
     print('cifar: train {} test {}'.format(len(trainset), len(testset)))
     return train_iter, test_iter, trainset.classes()
