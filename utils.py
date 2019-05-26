@@ -214,9 +214,9 @@ def test_net(net, valid_iter, ctx):
         else:
             X,Y = batch
         batch_size = X.shape[0]
-        out = X.as_in_context(ctx)
-        out = net(out)
-        out = out.as_in_context(mx.cpu())
+        X,Y = X.as_in_context(ctx),Y.as_in_context(ctx)
+        out = net(X)
+        #out = out.as_in_context(mx.cpu())
         cls_acc.update(Y,out)
         loss = cls_loss(out, Y)
         test_loss.append( loss.sum().asscalar() )
