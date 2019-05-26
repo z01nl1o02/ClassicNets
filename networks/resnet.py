@@ -5,12 +5,14 @@ import mxnet as mx
 class Residual(nn.Block):
     def __init__(self, num_channels, use_1x1conv=False, strides=1, **kwargs):
         super(Residual,self).__init__(**kwargs)
-        self.conv1 = nn.Conv2D(num_channels, kernel_size=3, strides=strides,padding=1)
-        self.conv2 = nn.Conv2D(num_channels, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2D(num_channels, kernel_size=3, strides=strides,padding=1,use_bias=False)
+        self.conv2 = nn.Conv2D(num_channels, kernel_size=3, padding=1,use_bias=False)
         if use_1x1conv:
-            self.conv3 = nn.Conv2D(num_channels,kernel_size=1,strides=strides)
+            self.conv3 = nn.Conv2D(num_channels,kernel_size=1,strides=strides,use_bias=False)
+            self.bn3 = nn.BatchNorm()
         else:
             self.conv3 = None
+            self.bn3 = None
         self.bn1 = nn.BatchNorm()
         self.bn2 = nn.BatchNorm()
 
@@ -18,7 +20,7 @@ class Residual(nn.Block):
         Y = nd.relu(self.bn1(self.conv1(X)))
         Y = self.bn2(self.conv2(Y))
         if self.conv3:
-            X = self.conv3(X)
+            X = self.bn3(self.conv3(X))
         return nd.relu(Y + X)
 
 def resnet_block(num_channels, num_residuals, first_block=False):
@@ -148,13 +150,13 @@ def load(type,num_classes):
 if 0:
     ctx = mx.gpu()
     X = nd.random.uniform(0,1,(1,3,32,32),ctx=ctx)
-    net = load("resnet-N",10)
+    net = load("resnet-164",10)
     #net.initialize(ctx=ctx)
     net.collect_params().reset_ctx(ctx)
     Y = X
-    for layer in net:
-        Y = layer(Y)
-        print('{} shape: {}'.format(layer.name, Y.shape))
+    #for layer in net:
+    Y = net(Y)
+    print('{} shape: {}'.format(X.shape, Y.shape))
 
 
 

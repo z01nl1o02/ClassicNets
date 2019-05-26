@@ -5,10 +5,10 @@ from mxnet import nd,image,gluon
 from mxnet.gluon.data import DataLoader
 ########################################################
 ########################################################
+
 class CIFAR(gluon.data.Dataset):
-    def __init__(self, fortrain,resize = None):
+    def __init__(self, fortrain):
         super(CIFAR,self).__init__()
-        self._resize = resize
         self._pad = 4
         self._mean = np.array([0.4914, 0.4822, 0.4465])
         self._std = np.array([0.2023, 0.1994, 0.2010])
@@ -40,14 +40,6 @@ class CIFAR(gluon.data.Dataset):
         path, cid = self._data[idx]
         img = cv2.imread(path,1)
 
-        if self._resize is not None:
-            if self._fortrain:
-                interp_methods = [cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_AREA, \
-                                  cv2.INTER_NEAREST, cv2.INTER_LANCZOS4]
-            else:
-                interp_methods = [cv2.INTER_LINEAR]
-            interp_method = interp_methods[int(np.random.uniform(0, 1) * len(interp_methods))]
-            img = cv2.resize(img,self._resize,interp_method)
         img = np.pad(img, ((self._pad, self._pad), (self._pad, self._pad), (0, 0)), mode='constant', constant_values=0)
         img = nd.array(img, dtype='float32') / 255
         H,W,C = img.shape
@@ -56,26 +48,28 @@ class CIFAR(gluon.data.Dataset):
             augs = image.CreateAugmenter(data_shape=data_shape, resize=0, rand_mirror=True, rand_crop=True, mean=self._mean, std=self._std)
         else:
             augs = image.CreateAugmenter(data_shape=data_shape,resize=0, rand_mirror=False, rand_crop=False, mean=self._mean, std=self._std)
-        #cv2.imwrite('before.bmp',np.uint8(img.asnumpy() * 255))
+   
         for aug in augs:
-            img = aug(img)
-        #tmp = (255*(img.asnumpy() * self._std + self._mean)).astype(np.uint8)
-        #cv2.imwrite('after.bmp',tmp)
+             img = aug(img)
 
         
         img = nd.transpose(img,(2,0,1))
-        return img,cid
+        return img,nd.array([cid]).astype("float32")
+        
 
-
-def load(batch_size, resize = None):
-    trainset = CIFAR(True,resize)
-    testset = CIFAR(False,resize)
-    train_iter = gluon.data.DataLoader(trainset, batch_size, shuffle=False, last_batch="rollover",num_workers=3)
-    test_iter = gluon.data.DataLoader(trainset, batch_size, shuffle=False, last_batch="rollover",num_workers=3)
+def load_(batch_size):
+    trainset = CIFAR(True)
+    testset = CIFAR(False)
+    train_iter = gluon.data.DataLoader(trainset, batch_size, shuffle=True, last_batch="rollover",num_workers=3)
+    test_iter = gluon.data.DataLoader(trainset, batch_size, shuffle=False, last_batch="rollover",num_workers=2)
     print('cifar: train {} test {}'.format(len(trainset), len(testset)))
     return train_iter, test_iter, trainset.classes()
 
 ##################################################################################################
 ##################################################################################################
 
-
+if 0:
+    print('start...')
+    train_iter,_,_ = load(1)
+    for X,Y in train_iter:
+        Z = X.shape
