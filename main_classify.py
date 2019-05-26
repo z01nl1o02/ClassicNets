@@ -11,14 +11,15 @@ class RESNET_CIFAR10:
     def __init__(self):
         self._num_epochs = 150
         self._batch_size = 128
+        self._base_lr = 0.1
     def trainer(self,net):
         print("trainer \t optim:sgd wd: 1e-4, momentum:0.9")
         return Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":1e-4,"momentum":0.9})
     def learning_rate_scheduler(self):
-        print("learning_rate \t base_lr:0.1, scheduler: MultiFactorScheduler")
+        print("learning_rate \t base_lr:%d, scheduler: MultiFactorScheduler"%self._base_lr)
         lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(self._num_epochs * 0.5), int(self._num_epochs * 0.75) ], factor=0.1)
-        lr_sch.base_lr = 0.1
-        return 
+        lr_sch.base_lr = self._base_lr
+        return lr_sch
     def epoch_num(self):
         print("epoch: %d"%self._num_epochs)
         return self._num_epochs
@@ -109,8 +110,8 @@ if __name__=="__main__":
     lr_sch = resnet_cifar10_config.learning_rate_scheduler()
 
 
-    lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1)
-    lr_sch.base_lr = base_lr
+    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1)
+    #lr_sch.base_lr = base_lr
     #lr_sch = lr_schs.CosineScheduler(num_epochs, base_lr,warmup=10)
 
     
