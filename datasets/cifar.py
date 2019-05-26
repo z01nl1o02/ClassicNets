@@ -57,7 +57,7 @@ class CIFAR(gluon.data.Dataset):
         return img,nd.array([cid]).astype("float32")
         
 
-def load_(batch_size):
+def load(batch_size):
     trainset = CIFAR(True)
     testset = CIFAR(False)
     train_iter = gluon.data.DataLoader(trainset, batch_size, shuffle=True, last_batch="rollover",num_workers=3)
