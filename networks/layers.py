@@ -1,5 +1,5 @@
 import mxnet as mx
-from mxnet import gluon,autograd
+from mxnet import gluon,autograd,nd
 
 class SpatialDropout2D(mx.gluon.Block):
     def __init__(self, p = 0.5):
