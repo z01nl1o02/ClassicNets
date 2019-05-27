@@ -172,7 +172,7 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             X,Y = batch
             X,Y = X.as_in_context(ctx), Y.as_in_context(ctx)
             with autograd.record(True):
-                out = net(out)
+                out = net(X)
                 loss = cls_loss(out, Y)
             loss.backward()
             nd.waitall()

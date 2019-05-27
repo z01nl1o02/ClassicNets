@@ -1,7 +1,7 @@
 import mxnet as mx
 from mxnet import gluon,nd
 from mxnet.gluon import nn
-from layers import SpatialDropout2D
+from networks.layers import SpatialDropout2D
 
 class Upsampling(nn.Block):
     def __init__(self,channels, scale=2):

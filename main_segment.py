@@ -1,7 +1,7 @@
 import mxnet as mx
 from mxnet.gluon import Trainer
-from utils import CycleScheduler,FocusLoss,WeightCELoss
-from datasets import thread,segment_voc,segment_vocaug
+from utils import FocusLoss,WeightCELoss
+from datasets import thread,segment_voc,segment_vocaug,segment_voc_human
 from networks import fcn,enet,unet
 from utils import train_seg,MIOU
 import os
@@ -14,7 +14,7 @@ num_epochs = 100
 base_lr = 0.1 #should be small for model with pretrained model
 wd = 0.0005
 net_name = "unet"
-dataset_name = 'voc'
+dataset_name = 'segment_voc_human'
 label_scale = 1 #8 4 2 1     #enet train from raw to fine
 load_to_train = False
 output_folder = os.path.join("output")
@@ -31,6 +31,9 @@ if dataset_name == "thread":
 elif dataset_name == 'voc':
     class_names = segment_voc.get_class_names()
     train_iter, test_iter, num_train = segment_voc.load(batch_size,scale=label_scale)
+elif dataset_name == "segment_voc_human":
+    class_names = segment_voc_human.get_class_names()
+    train_iter, test_iter, num_train = segment_voc_human.load(batch_size,scale=label_scale)
 elif dataset_name == "vocaug":
     class_names = segment_vocaug.get_class_names()
     train_iter, test_iter, num_train = segment_vocaug.load(batch_size,scale=label_scale)
