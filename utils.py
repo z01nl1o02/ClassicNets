@@ -2,7 +2,7 @@
 import mxnet as mx
 from mxnet import gluon,nd,autograd
 import numpy as np
-import cv2,os,pdb,time
+import cv2
 from mxnet import lr_scheduler
 
 import os
@@ -170,15 +170,12 @@ def train_seg(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
             iter_num += 1
             trainer.set_learning_rate(lr_sch(iter_num))
             X,Y = batch
-            out = X.as_in_context(ctx)
+            X,Y = X.as_in_context(ctx), Y.as_in_context(ctx)
             with autograd.record(True):
                 out = net(out)
-                out = out.as_in_context(mx.cpu())
-                #print(out.shape,Y.shape)
                 loss = cls_loss(out, Y)
             loss.backward()
             nd.waitall()
-            #print loss
             train_loss += loss.mean().asscalar()
             trainer.step(batch_size)
             cls_acc.update(Y,out)
@@ -663,18 +660,6 @@ class WeightCELoss(mx.gluon.loss.Loss):
         return loss
 
 
-class SpatialDropout2D(mx.gluon.Block):
-    def __init__(self, p):
-        super(SpatialDropout2D, self).__init__()
-        self.p = p
-
-    def forward(self, x):
-        if not autograd.is_training():
-            return x
-        mask_shape = x.shape[:2] + (1, 1)
-        mask = nd.random.multinomial(nd.array([self.p, 1 - self.p],ctx = x.context),
-                                     shape=mask_shape).astype('float32')
-        return (x * mask) / (1 - self.p)
 
 
 if 0:
