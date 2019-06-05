@@ -3,6 +3,7 @@ import os,cv2
 import numpy as np
 import random
 
+
 def pascal_palette_all_classes(): #RGB mode
   palette = {(  0,   0,   0) : 0 ,
              (  1,   1,   1) : 1 , #hat
@@ -26,6 +27,9 @@ def pascal_palette_all_classes(): #RGB mode
 
   return palette
   
+
+
+#mIU: 0.8918
 def pascal_palette_two_classes(): #RGB mode
   palette = {(  0,   0,   0) : 0 ,
              (  1,   1,   1) : 1 , #hat
@@ -48,6 +52,32 @@ def pascal_palette_two_classes(): #RGB mode
              }
 
   return palette  
+#epoch 80 lr 0.01898740554156171
+#train loss 0.17325214590598914 ('mIOU', 0.7325548527826364)
+#test loss 0.185477201716778 ('mIOU', 0.7032873101235821)
+#(background:0.960) (head:0.717) (body-top:0.630) (arm:0.546) (body-down:0.664)
+def pascal_palette_five_classes(): #RGB mode
+  palette = {(  0,   0,   0) : 0 ,
+             (  1,   1,   1) : 1 , #hat
+             (  2,   2,   2) : 1 , #hair           
+             (  3,   3,   3) : 1 , #sunglass       
+             (  4,   4,   4) : 2 , #upper-clothes
+             (  5,   5,   5) : 4 , #skirt
+             (  6,   6,   6) : 4 , #pants
+             (  7,   7,   7) : 4 , #dress 
+             (  8,   8,   8) : 4 , #belt
+             (  9,   9,   9) : 4 , #left-shoe
+             (  10,   10,   10) : 4, #right-shoe 
+             (  11,   11,   11) : 1, #face 
+             (  12,   12,   12) : 4, #left-leg 
+             (  13,   13,   13) : 4, #right-leg
+             (  14,   14,   14) : 3, #left-arm 
+             (  15,   15,   15) : 3, #right-arm
+             (  16,   16,   16) : 0, #bag
+             (  17,   17,   17) : 1, #scarf 
+             }
+
+  return palette  
 
   
 def convert_from_color_segmentation(arr_3d,number_classes):
@@ -55,6 +85,8 @@ def convert_from_color_segmentation(arr_3d,number_classes):
     arr_2d = np.zeros((arr_3d.shape[0], arr_3d.shape[1]), dtype=np.uint8)
     if number_classes == 2:
         palette = pascal_palette_two_classes()
+    if number_classes == 5:
+        palette = pascal_palette_five_classes()        
     else:
         palette = pascal_palette_all_classes()
     for c, i in palette.items():
@@ -72,7 +104,7 @@ class DatasetVOC(gluon.data.Dataset):
         self.len_resize = len_resize
         self.hw_crop = hw_crop
         self.label_scale = label_scale
-        self.number_classes = 18
+        self.number_classes = 5
         if fortrain:
             list_file = "ImageSets/Segmentation/train.txt"
         else:
@@ -147,15 +179,17 @@ class DatasetVOC(gluon.data.Dataset):
         return (image,label)
 
 def get_class_names():
-    names = "background,hat,hair,sunglass,upper-clothes,skirt,pants,dress,belt,left-shoe,right-shoe,face,left-leg,right-leg,left-arm,right-arm" + \
-            ",bag,scarf"
+    print("all classes")
+    #names = "background,hat,hair,sunglass,upper-clothes,skirt,pants,dress,belt,left-shoe,right-shoe,face,left-leg,right-leg,left-arm,right-arm" + \
+    #        ",bag,scarf"
+    names = "background,head,body-top,arm,body-down"
     return names.split(',')
     
 def load(batch_size,scale):
     root = os.getenv("ENV_DATASET_DIR")
     trainset = DatasetVOC(voc_sdk_root=os.path.join(root,"humanparsing"),fortrain=True,label_scale=scale)
     testset = DatasetVOC(voc_sdk_root=os.path.join(root,"humanparsing"),fortrain=False,label_scale=scale)
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover")
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=3)
     test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
     return train_iter, test_iter, len(trainset)
 
