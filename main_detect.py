@@ -11,10 +11,10 @@ import os,pdb,cv2
 if __name__=="__main__":
 
     ctx = mx.gpu(0)
-    batch_size = 16+8
+    batch_size = 32//2
     num_epochs = 500
-    base_lr = 0.1
-    wd = 0.0001
+    base_lr = 0.01
+    wd = 0.0004
     momentum = 0.9
 
     pretrained = 'output/ssd.params'
@@ -28,7 +28,7 @@ if __name__=="__main__":
         os.makedirs(output_folder)
 
 
-    train_iter,test_iter, classes = detect_voc.load("2007_2012",batch_size)
+    train_iter,test_iter, classes = detect_voc.load("2007",batch_size)
 
     number_classes = len(classes)
 
@@ -41,12 +41,13 @@ if __name__=="__main__":
     net.collect_params().reset_ctx(ctx)
 
 
-    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.45), int(num_epochs * 0.7) ], factor=0.1, base_lr = base_lr, warmup_steps = 0)
-    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.45), int(num_epochs * 0.7) ], factor=0.1)
+    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.45), int(num_epochs * 0.7) ], factor=0.1, base_lr = base_lr, warmup_steps = 10)
+    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.7) ], factor=0.1)
     #lr_sch.base_lr = base_lr
-    lr_sch = lr_schs.CosineScheduler(num_epochs,base_lr=base_lr,warmup=10)
-    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.5)], factor=0.1)
-    #lr_sch.base_lr = base_lr
+    #lr_sch = lr_schs.CosineScheduler(num_epochs,base_lr=base_lr,warmup=10)
+    lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.45),int(num_epochs * 0.7)], factor=0.1)
+    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.7)], factor=0.1)
+    lr_sch.base_lr = base_lr
 
     trainer = Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":wd,"momentum":momentum})
 

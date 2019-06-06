@@ -38,13 +38,12 @@ number_classes = len(classes)
 
 
 net = ssd.SSD(number_classes)
-import pdb
 net.load_parameters('output/ssd.params')
 net.collect_params().reset_ctx(ctx)
 
 
 logger.info("========ssd forward===========")
-mAP = VOC07MApMetric()
+mAP = VOC07MApMetric(class_names=None)
 thresh = 0.0
 
 for idx in range(len(testset)):
@@ -67,10 +66,10 @@ for idx in range(len(testset)):
     labels,preds = np.expand_dims(labels,0), np.expand_dims(preds,0)
     labels,preds = mx.nd.array(labels), mx.nd.array(preds)
     mAP.update(labels,preds)
-    if idx > 0 and 0 == (idx % 100):
+    if idx > 0 and 0 == (idx % 500):
         logger.info(mAP.get())
-	break
-
+        break
+#mAP.save_roc_graph(path="debug/")
 logger.info("in total:")
 logger.info(mAP.get())        
 exit(0)

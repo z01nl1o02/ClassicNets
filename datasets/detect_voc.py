@@ -215,7 +215,14 @@ class DETECT_VOC(gluon.data.Dataset):
             break
         return src,bbox
 
-
+    def Shuffle_channle(self,src):
+        H,W,C = src.shape
+        cvtChannels = [k for k in range(C)]
+        random.shuffle(cvtChannels)
+        res = np.zeros(src.shape)
+        for c in range(C):
+            res[:,:,c] = src[:,:,cvtChannels[c]]
+        return res
 
     def ExpandImage(self,src, bbox):
         H,W,C = src.shape
@@ -251,6 +258,8 @@ class DETECT_VOC(gluon.data.Dataset):
     def data_aug_shuffle(self,src,bbox,p = 0.5):
         src = src.astype(np.float32)
         if random.random() < p:
+            src = self.Shuffle_channle(src)
+        if random.random() < p:
             src = self.BrightnessJitterAug(src)
         if random.random() < p:
             src = self.ContrastJitterAug(src)
@@ -268,6 +277,7 @@ class DETECT_VOC(gluon.data.Dataset):
             src,bbox = self.BatchSample(src,bbox)
         return src,bbox
 
+
     def __getitem__(self,idx):
         image_path, xml_path = self._paths[idx]
         targets = self._load_pascal_annotation(xml_path)
@@ -279,7 +289,7 @@ class DETECT_VOC(gluon.data.Dataset):
                 tmp = 1.0 - targets[:, 1]
                 targets[:, 1] = 1.0 - targets[:, 3]
                 targets[:, 3] = tmp
-            img,targets = self.data_aug_shuffle(img,targets,0.5)
+            img,targets = self.data_aug_shuffle(img,targets,0.7)
 
         img = img.astype(np.uint8)
         if self._fortrain:
@@ -302,7 +312,7 @@ def load(years,batch_size):
     trainset = DETECT_VOC("trainval",years,True)
     testset = DETECT_VOC("test",years,False)
     print("train: ",len(trainset))
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=-1)
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=4)
     test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=-1)
     return train_iter, test_iter, trainset._classes
 

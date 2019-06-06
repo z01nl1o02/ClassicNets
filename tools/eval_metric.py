@@ -55,7 +55,7 @@ class MApMetric(mx.metric.EvalMetric):
             os.remove(plot_path)
         fig = plt.figure()
         plt.title(self.class_names[classkey])
-        plt.plot(recall, prec, 'b', label='AP = %0.2f' % ap)
+        plt.plot(recall, prec, 'b', label='AP')
         plt.legend(loc='lower right')
         plt.xlim([0, 1])
         plt.ylim([0, 1])

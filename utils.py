@@ -342,7 +342,7 @@ def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
     bbox = bbox_loss(bbox_preds_valid, bbox_labels_valid)
 
 
-    return (cls.mean() + bbox.mean()) * batch_size
+    return (cls.mean() + bbox.mean()) * batch_size, cls.mean(), bbox.mean()
 
 
 
@@ -393,7 +393,7 @@ def predict_ssd(net,X):
     
 def test_ssd(net, valid_iter, ctx):
     start = time.time()
-    acc_hist,mae_hist = [],[]
+    loss_cls_hist, loss_bbox_hist = [], []
     loss_hist = []
     for batch in valid_iter:        
         X = batch[0].as_in_context(ctx)
@@ -404,16 +404,16 @@ def test_ssd(net, valid_iter, ctx):
         bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
             anchors, Y, cls_preds.transpose((0, 2, 1)))
         # 根据类别和偏移量的预测和标注值计算损失函数
-        l = ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
+        l,l_cls, l_bbox = ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
                       bbox_masks)
         loss_hist.append( l.asnumpy()[0] / X.shape[0] )
-        acc_hist.append( ssd_cls_eval(cls_preds, cls_labels) )
-        mae_hist.append( ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks) )
+        loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
+        loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
     loss = np.asarray(loss_hist).mean()
-    acc = np.mean(acc_hist)
-    mae = np.mean(mae_hist)
-    logger.info('\t test class err %.5e, bbox mae %.5e, loss %.5e, time %.1f sec' % ( 
-        1 - acc, mae, loss, time.time() - start))
+    loss_bbox = np.mean(loss_bbox_hist)
+    loss_cls = np.mean(loss_cls_hist)
+    logger.info('\t test class loss %.5e, bbox loss %.5e, loss %.5e, time %.1f sec' % ( 
+        loss_cls, loss_bbox, loss, time.time() - start))
     return
     
     
@@ -421,7 +421,8 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
     logger.info("===================START TRAINING====================")
     start = time.time()
     for epoch in range(num_epochs):
-        acc_hist, mae_hist = [],[]
+        #acc_hist, mae_hist = [],[]
+        loss_cls_hist, loss_bbox_hist = [], []
         loss_hist = []
         trainer.set_learning_rate(lr_sch(epoch))
         for batch in train_iter:        
@@ -483,22 +484,24 @@ def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
 
 
                 # 根据类别和偏移量的预测和标注值计算损失函数
-                l = ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
+                l,l_cls, l_bbox = ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
                               bbox_masks)
             l.backward()
             trainer.step(batch_size)
             nd.waitall()
             loss_hist.append( l.asnumpy()[0] / batch_size )
-            acc_hist.append( ssd_cls_eval(cls_preds, cls_labels) )
-            mae_hist.append( ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks) )
+            loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
+            loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
+            #acc_hist.append( ssd_cls_eval(cls_preds, cls_labels) )
+            #mae_hist.append( ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks) )
             #pdb.set_trace()
 
         if (epoch + 1)%2 == 0:
             loss = np.asarray(loss_hist).mean()
-            acc = np.mean(acc_hist)
-            mae = np.mean(mae_hist)
-            logger.info('epoch %2d, class err %.5e, bbox mae %.5e, loss %.5e, lr %.5e time %.1f sec' % (
-                epoch + 1, acc, mae, loss, trainer.learning_rate, time.time() - start))
+            loss_bbox = np.mean(loss_bbox_hist)
+            loss_cls = np.mean(loss_cls_hist)
+            logger.info('epoch %2d, class loss %.5e, bbox loss %.5e, loss %.5e, lr %.5e time %.1f sec' % (
+                epoch + 1, loss_cls,loss_bbox, loss, trainer.learning_rate, time.time() - start))
             start = time.time() #restart    
 
         if (epoch + 1) % 50 == 0:
