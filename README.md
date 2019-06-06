@@ -22,6 +22,7 @@ classical networks with gluon
 | :----: | :----: |  
 | squeezenet | 0.91 |  
 | densenet-158 | 0.95 |  
+| resnet-N(3) | 0.97 |
 
 
 

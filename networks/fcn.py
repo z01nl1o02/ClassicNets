@@ -6,9 +6,9 @@ import cv2
 #for tiny target batchnorm and dropout may cause much difference between train-stage and test-stage
 #this fcn is based on vgg1 without batchnorm/dropout
 class FCN(gluon.Block):
-    def __init__(self, num_class,root='./'):
+    def __init__(self, num_class):
         super(FCN,self).__init__()
-        backbone = gluon.model_zoo.vision.vgg11(pretrained=True,root = root)
+        backbone = gluon.model_zoo.vision.vgg11(pretrained=True)
         self.downlayer_2 = gluon.nn.Sequential()
         for layer in backbone.features[0:3]:
             self.downlayer_2.add(layer)
@@ -86,8 +86,8 @@ class FCN(gluon.Block):
 
         return out
 
-def get_net(num_class,root):
-    return FCN(num_class,root=root)
+def get_net(num_class):
+    return FCN(num_class)
 
 if 0:
     ctx = mx.gpu()

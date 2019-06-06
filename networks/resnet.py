@@ -5,12 +5,14 @@ import mxnet as mx
 class Residual(nn.Block):
     def __init__(self, num_channels, use_1x1conv=False, strides=1, **kwargs):
         super(Residual,self).__init__(**kwargs)
-        self.conv1 = nn.Conv2D(num_channels, kernel_size=3, strides=strides,padding=1)
-        self.conv2 = nn.Conv2D(num_channels, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2D(num_channels, kernel_size=3, strides=strides,padding=1,use_bias=False)
+        self.conv2 = nn.Conv2D(num_channels, kernel_size=3, padding=1,use_bias=False)
         if use_1x1conv:
-            self.conv3 = nn.Conv2D(num_channels,kernel_size=1,strides=strides)
+            self.conv3 = nn.Conv2D(num_channels,kernel_size=1,strides=strides,use_bias=False)
+            self.bn3 = nn.BatchNorm()
         else:
             self.conv3 = None
+            self.bn3 = None
         self.bn1 = nn.BatchNorm()
         self.bn2 = nn.BatchNorm()
 
@@ -18,7 +20,7 @@ class Residual(nn.Block):
         Y = nd.relu(self.bn1(self.conv1(X)))
         Y = self.bn2(self.conv2(Y))
         if self.conv3:
-            X = self.conv3(X)
+            X = self.bn3(self.conv3(X))
         return nd.relu(Y + X)
 
 def resnet_block(num_channels, num_residuals, first_block=False):
@@ -33,6 +35,16 @@ def resnet_block(num_channels, num_residuals, first_block=False):
                 Residual(num_channels)
             )
     return blk
+    
+def resnetN(num_classes,N=3):
+    net = nn.Sequential()
+    net.add(
+        nn.Conv2D(16,kernel_size=3,strides=1,padding=1),
+        nn.BatchNorm(), nn.Activation("relu"))
+    net.add( resnet_block(16,N,True), resnet_block(32,N), resnet_block(64,N) )
+    net.add( nn.GlobalAvgPool2D(), nn.Dense(num_classes))
+    return net
+        
 
 def resnet_18(num_classes):
     net = nn.Sequential()
@@ -127,18 +139,24 @@ def load(type,num_classes):
         net.initialize(init=mx.initializer.Xavier())
         net.hybridize()
         return net
+    if type == "resnet-N":
+        #cifar-10
+        net = resnetN(num_classes,3)
+        net.initialize(init=mx.initializer.Xavier())
+        return net
     return None
 
 
 if 0:
     ctx = mx.gpu()
-    X = nd.random.uniform(0,1,(1,3,224,224),ctx=ctx)
-    net = load("resnet-18",10)
-    net.initialize(ctx=ctx)
+    X = nd.random.uniform(0,1,(1,3,32,32),ctx=ctx)
+    net = load("resnet-164",10)
+    #net.initialize(ctx=ctx)
+    net.collect_params().reset_ctx(ctx)
     Y = X
-    for layer in net:
-        Y = layer(Y)
-        print('{} shape: {}'.format(layer.name, Y.shape))
+    #for layer in net:
+    Y = net(Y)
+    print('{} shape: {}'.format(X.shape, Y.shape))
 
 
 

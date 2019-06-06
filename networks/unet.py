@@ -1,75 +1,110 @@
 import mxnet as mx
 from mxnet import gluon,nd
 from mxnet.gluon import nn
+from networks.layers import SpatialDropout2D
 
-class DOWNBLOCK(nn.Block):
-    def __init__(self,num_filters):
-        super(DOWNBLOCK,self).__init__()
-        self.stageA = nn.Sequential()
-        for num in num_filters:
-            self.stageA.add(
-                nn.BatchNorm(),
-                nn.Conv2D(num,kernel_size=3,strides=1,padding=1,activation="relu"),
-            )
-        self.stageB = nn.Sequential()
-        self.stageB.add(
-            nn.MaxPool2D(pool_size=2,strides=2)
-        )
-    def forward(self, X):
-        outA = self.stageA(X)
-        outB = self.stageB(outA)
-        return outA,outB
+class Upsampling(nn.Block):
+    def __init__(self,channels, scale=2):
+        super(Upsampling,self).__init__()
+        with self.name_scope():
+            self.scale = scale
+            self.conv = nn.Conv2D(channels,kernel_size=3,strides=1,padding=1)
+        return
+    def forward(self,X):
+        _,_,H,W = X.shape
+        y = nd.contrib.BilinearResize2D(X, height=H * self.scale, width=W * self.scale)
+        #print(y.shape, X.shape)
+        return self.conv(y)
 
-class UPBLOCK(nn.Block):
-    def __init__(self, num_filters):
-        super(UPBLOCK,self).__init__()
-        self.stageA = nn.Sequential()
-        for num in num_filters:
-            self.stageA.add(
-                nn.BatchNorm(),
-                nn.Conv2D(num,kernel_size=3,strides=1,padding=1,activation="relu"),
-            )
-        self.stageB = nn.Sequential()
-        self.stageB.add(
-            nn.Conv2D(num_filters[-1],kernel_size=1,strides=1,padding=0,activation="relu"),
-        )
+class ConvBNRelu(nn.Block):
+    def __init__(self,filters):
+        super(ConvBNRelu,self).__init__()
+        with self.name_scope():
+            self.layers = nn.Sequential()
+            for f in filters:
+                self.layers.add(
+                    nn.Conv2D(f,kernel_size=3,strides=1,padding=1),
+                    nn.BatchNorm(),
+                    nn.Activation("relu"),
+                )
         return
     def forward(self, X):
-        Y = self.stageA(X)
-        _,_,H,W = Y.shape
-        Y = nd.contrib.BilinearResize2D(Y,height=H*2, width=W*2)
-        Y = self.stageB(Y)
-        return Y
+        return self.layers(X)
 
 
 class UNET(nn.Block):
     def __init__(self,num_classes):
         super(UNET,self).__init__()
+        with self.name_scope():
+            self.d1 = ConvBNRelu((8,8))
 
-        self.downA = DOWNBLOCK((64,64))
-        self.downB = DOWNBLOCK((128,128,128))
-        self.downC = DOWNBLOCK((256,256,256))
-        self.downD = DOWNBLOCK((512,512,512))
-        self.downE = DOWNBLOCK((1024,1024,1024))
+            self.d2d = nn.MaxPool2D(3,2,1)
+            self.d2 = ConvBNRelu((16,16))
 
-        self.upA = UPBLOCK((512,512,512))
-        self.upB = UPBLOCK((256,256,256))
-        self.upC = UPBLOCK((128,128,128))
-        self.upD = UPBLOCK((64,64,64,num_classes))
+            self.d3d = nn.MaxPool2D(3,2,1)
+            self.d3 = ConvBNRelu((32,32))
+
+            self.d4d = nn.MaxPool2D(3,2,1)
+            self.d4 = ConvBNRelu((64,64))
+
+            self.d5d = nn.MaxPool2D(3,2,1)
+            self.dp = SpatialDropout2D()
+            self.u5 = ConvBNRelu((64,64))
+
+
+            self.u4u = Upsampling(64)
+            self.u4 = ConvBNRelu((32,32))
+
+
+            self.u3u = Upsampling(32)
+            self.u3 = ConvBNRelu((16,16))
+
+
+            self.u2u = Upsampling(16)
+            self.u2 = ConvBNRelu((8,8))
+
+            self.u1u = Upsampling(8)
+            self.u1 = ConvBNRelu((8,8))
+
+            self.u0 = nn.Conv2D(num_classes,kernel_size=3,strides=1,padding=1)
         return
     def forward(self,X):
-        down_out_A0, down_out_A1 = self.downA(X)
-        down_out_B0, down_out_B1 = self.downB(down_out_A1)
-        down_out_C0, down_out_C1 = self.downC(down_out_B1)
-        down_out_D0, down_out_D1 = self.downD(down_out_C1)
-        down_out_E0,_ = self.downE(down_out_D1)
+        d1 = self.d1(X)
+
+        d2d = self.d2d(d1)
+        d2 = self.d2(d2d)
+
+        d3d = self.d3d(d2)
+        d3 = self.d3(d3d)
+
+        d4d = self.d4d(d3)
+        d4 = self.d4(d4d)
+
+        d5d = self.d5d(d4)
+        u5 = self.u5(self.dp(d5d))
+
+        u4 = self.u4( u5 )
+        u4 = nd.concat(self.u4u(u4), d4)
+        #print(u4.shape, d4.shape)
+
+        u3 = self.u3(u4)
+        u3 = nd.concat(self.u3u(u3),d3)
+        #print(u3.shape, d3.shape)
 
 
-        up_out_A = nd.concat(self.upA(down_out_E0),down_out_D0,dim=1)
-        up_out_B = nd.concat(self.upB(up_out_A), down_out_C0,dim=1)
-        up_out_C = nd.concat(self.upC(up_out_B), down_out_B0,dim=1)
-        up_out_D = self.upD(up_out_C)
-        return up_out_D
+        u2 = self.u2(u3)
+        u2 = nd.concat(self.u2u(u2),d2)
+        #print(u2.shape, d2.shape)
+
+
+        u1 = self.u1(u2)
+        u1 = nd.concat(self.u1u(u1),d1)
+        #print(u1.shape, d1.shape)
+
+        u0 = self.u0(u1)
+        return u0
+
+
 
 def get_net(num_classes):
     net = UNET(num_classes)
@@ -80,9 +115,9 @@ if 0:
     #import os
     #os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = 0
     ctx = mx.gpu(0)
-    X = nd.random.uniform(0,1,(1,3,512,512),ctx=ctx)
-    net = get_net(21)
-    net.initialize(ctx=ctx)
+    X = nd.random.uniform(0,1,(1,3,256,256),ctx=ctx)
+    net = get_net(2)
+    net.collect_params().reset_ctx(ctx)
     print(net)
     Y = net(X)
     print(X.shape, Y.shape)

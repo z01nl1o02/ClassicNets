@@ -1,7 +1,6 @@
-
 import mxnet as mx
 from mxnet import gluon
-from utils import SpatialDropout2D
+from networks.layers import SpatialDropout2D
 from mxnet import nd
 
 

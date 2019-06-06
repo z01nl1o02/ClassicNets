@@ -7,37 +7,96 @@ from utils import train_net
 from tools import lr_schs
 import os,pdb
 
+class NET_DATASET_CONFIG(object):
+    def __init__(self):
+        return
+    def trainer(self,net):
+        return None
+    def learning_rate_scheduler(self):
+        return None
+    def epoch_num(self):
+        return 0
+    def batch_size(self):
+        return 0
+
+class RESNET_CIFAR10_CONFIG(NET_DATASET_CONFIG):
+    def __init__(self):
+        self._num_epochs = 150
+        self._batch_size = 128
+        self._base_lr = 0.1
+    def trainer(self,net):
+        print("trainer \t optim:sgd wd: 1e-4, momentum:0.9")
+        return Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":1e-4,"momentum":0.9})
+    def learning_rate_scheduler(self):
+        print("learning_rate \t base_lr:%d, scheduler: MultiFactorScheduler"%self._base_lr)
+        lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(self._num_epochs * 0.5), int(self._num_epochs * 0.75) ], factor=0.1)
+        lr_sch.base_lr = self._base_lr
+        return lr_sch
+    def epoch_num(self):
+        print("epoch: %d"%self._num_epochs)
+        return self._num_epochs
+    def batch_size(self):
+        print('batch size: %d'%self._batch_size)
+        return self._batch_size
+
+
+class VGG_CIFAR10_CONFIG(NET_DATASET_CONFIG):
+    def __init__(self):
+        self._num_epochs = 100
+        self._batch_size = 128
+        self._base_lr = 0.1
+    def trainer(self, net):
+        wd, mom = 1e-4,0.9
+        print("trainer \t optim:sgd wd: %f, momentum: %f"%(wd,mom))
+        return Trainer(net.collect_params(), optimizer="sgd", optimizer_params={"wd": wd, "momentum": mom})
+
+    def learning_rate_scheduler(self):
+        warmup = 10
+        print("learning_rate \t base_lr:%d, scheduler: CosineScheduler with warmup %d" % (self._base_lr,warmup))
+        lr_sch = lr_schs.CosineScheduler(num_epochs, self._base_lr,warmup=warmup)
+        #lr_sch.base_lr = self._base_lr
+        return lr_sch
+
+    def epoch_num(self):
+        print("epoch: %d" % self._num_epochs)
+        return self._num_epochs
+
+    def batch_size(self):
+        print('batch size: %d' % self._batch_size)
+        return self._batch_size
+
+
+resnet_cifar10_config = RESNET_CIFAR10_CONFIG()
+vgg_cifar10_config = VGG_CIFAR10_CONFIG()
+
 if __name__=="__main__":
 
     ctx = mx.gpu(0)
-    batch_size = 32
-    num_epochs = 500
-    base_lr = 0.0001
-    wd = 0.0004
-    mom = 0.9
-    resize=(32,32)
-    #resize = None
-    net_name = "squeezenet"
+    batch_size = vgg_cifar10_config.batch_size()
+    num_epochs = vgg_cifar10_config.epoch_num()
+    net_name = "vgg-11"
     data_name = "cifar"
-
     output_folder = os.path.join("output")
     output_prefix = os.path.join(output_folder,net_name)
 
 
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
+        
+  
+
 
     if data_name == "classify_dataset":
-        train_iter,test_iter, num_train = classify_dataset.load(batch_size,resize=resize)
+        train_iter,test_iter, num_train = classify_dataset.load(batch_size,None)
         class_names = classify_dataset.get_class_names()
     elif data_name == "fasionmnist":
-        train_iter,test_iter, num_train = fasionmnist.load(batch_size,resize=resize)
+        train_iter,test_iter, num_train = fasionmnist.load(batch_size,resize=None)
         class_names = fasionmnist.get_class_names()
     elif data_name == "cifar":
         if net_name == "squeezenet":
-	    batch_size = 128*2 #squeezenet requires large batch_size
-	    print('update batch size to ', batch_size)
-            train_iter,test_iter,class_names = cifar.load(batch_size,resize)
+            batch_size = 128*2 #squeezenet requires large batch_size
+            print('update batch size to ', batch_size)
+            train_iter,test_iter,class_names = cifar.load(batch_size,None)
         else:
             train_iter,test_iter,class_names = cifar.load(batch_size)
     else:
@@ -52,7 +111,7 @@ if __name__=="__main__":
         
 
     if net_name == "alexnet":
-        net = alexnet.get_net(len(class_names),fc_size = 256)
+        net = alexnet.load(len(class_names),fc_size = 256)
     elif net_name == "vgg-11":
         net = vgg.load("vgg-11",len(class_names))
     elif net_name == "nin":
@@ -62,10 +121,8 @@ if __name__=="__main__":
         net = googlelenet.load(len(class_names))
         base_lr = 0.1
         resize=(96,96)
-    elif net_name == "resnet-18":
-        net = resnet.load('resnet-18',len(class_names))
-        base_lr = 0.05
-        resize=(96,96)
+    elif net_name == "resnet-N":
+        net = resnet.load('resnet-N',len(class_names))
     elif net_name == "resnet-164":
         net = resnet.load('resnet-164',len(class_names))
     elif net_name == "densenet":
@@ -87,20 +144,13 @@ if __name__=="__main__":
             #print(net.collect_params()[param].grad.values())
            # sw.add_histogram(tag=key, values=value.grads(), global_step=iter_num, bins=1000)
 
-    #net.initialize(mx.initializer.Xavier())
+
     net.collect_params().reset_ctx(ctx)
+    trainer = vgg_cifar10_config.trainer(net)
+    lr_sch = vgg_cifar10_config.learning_rate_scheduler()
 
-    #print iter_per_epoch
-    #lr_sch = lr_scheduler.FactorScheduler(step=iter_per_epoch * 20, factor=0.1)
-    #lr_sch.base_lr = base_lr
 
-#    lr_sch = lr_scheduler.MultiFactorScheduler(step=[10,int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1, base_lr = base_lr, warmup_steps = 0)
-    #lr_sch = lr_scheduler.MultiFactorScheduler(step=[int(num_epochs * 0.1),int(num_epochs * 0.5), int(num_epochs * 0.75) ], factor=0.1)
-    #lr_sch.base_lr = base_lr
-    lr_sch = lr_schs.CosineScheduler(num_epochs, base_lr)
 
-#    trainer = Trainer(net.collect_params(),optimizer="adam",optimizer_params={"wd":wd,"momentum":mom})
-    trainer = Trainer(net.collect_params(),optimizer="adam",optimizer_params={"wd":wd})
 
     train_net(net,train_iter,test_iter,batch_size,trainer,ctx, num_epochs, lr_sch, output_prefix)
 
