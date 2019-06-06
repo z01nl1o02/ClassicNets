@@ -4,22 +4,38 @@ from mxnet.gluon import loss as gloss, nn
 import mxnet as mx
 import numpy as np
 from mxnet.gluon.model_zoo import vision
+from gluoncv.model_zoo import vgg16_atrous_300
+from gluoncv import model_zoo
 
 
-def conv_layer(out_ch, ks, padding,stride):
+
+class NormScale(nn.HybridBlock):
+    def __init__(self, channel, scale, prefix='scale_'):
+        super(NormScale, self).__init__(prefix=prefix)
+        with self.name_scope():
+            self._channel = channel
+            self._scale = scale
+            self.weight = self.params.get('scale', shape=(1, channel, 1, 1),
+                                          init=mx.init.Constant(scale), wd_mult=0.1)
+
+    def hybrid_forward(self, F, x, *args, **kwargs):
+        x = F.L2Normalization(x, mode="channel")
+        x = F.broadcast_mul(lhs=x, rhs=self.weight.data())
+        return x
+
+def conv_layer(out_ch, kernel_size, padding,stride,dilation=1):
     layer = nn.Sequential()
     layer.add(
-        nn.Conv2D(out_ch,ks,strides=stride,padding=padding),
+        nn.Conv2D(out_ch,kernel_size,strides=stride,padding=padding,dilation=dilation),
         nn.BatchNorm(),
         nn.Activation("relu")
     )
     return layer
 
-def down_sample_blk(num_channels):
+def down_sample_blk(conv_configs):
     blk = nn.Sequential()
-    for _ in range(2):
-        blk.add( conv_layer(num_channels,ks=3,padding=1,stride=1) )
-    blk.add(nn.MaxPool2D(2))
+    for (num_channels,kernel_size,padding,stride,dilation) in conv_configs:
+        blk.add( conv_layer(num_channels,kernel_size=kernel_size,padding=padding,stride=stride, dilation=dilation) )
     return blk
 
 
@@ -78,6 +94,7 @@ def blk_forward(X, blk, size, ratio, cls_predictor, bbox_predictor):
     return (Y, anchors, cls_preds, bbox_preds)
 
 
+
 def get_resnet_34():
     pretrained = vision.resnet34_v1(pretrained=True)
     #pretrained_2 = resnet34_v1(pretrained=True, ctx=self.ctx)
@@ -110,13 +127,17 @@ def get_resnet_50():
         body.add(*pretrained.features[0:-3])
     return body
 
+
+
 class BACKBONE(nn.Block):
     def __init__(self,name=""):
         super(BACKBONE, self).__init__()
         if name == "resnet34":
             self.stage = get_resnet_34()
-        if name == "resnet50":
+        elif name == "resnet50":
             self.stage = get_resnet_50()
+        elif name == "vgg16_300":
+            self.stage = get_vgg16_300()
         else:
             self.stage = nn.Sequential()
             self.stage.add(
@@ -139,9 +160,12 @@ def calc_anchor_sizes(ranges, num):
     #print(sizes)
     return sizes
 
-class SSD(nn.Block):
+
+
+
+class SSD_CUSTOM(nn.Block):
     def __init__(self, num_classes, anchor_sizes = None, anchor_ratios = None, backbone=None, **kwargs):
-        super(SSD, self).__init__(**kwargs)
+        super(SSD_CUSTOM, self).__init__(**kwargs)
         self.num_classes = num_classes
         
         if anchor_sizes is None:
@@ -150,7 +174,7 @@ class SSD(nn.Block):
             self.anchor_sizes = anchor_sizes
         
         if anchor_ratios is None:
-            self.anchor_ratios = ((1, 2, 0.5),(1, 2, 0.5),(1, 2, 0.5),(1, 2, 0.5),(1, 2, 0.5),(1,2,0.5))
+            self.anchor_ratios = ((1, 2, 3, 0.5,1.0/3),(1, 2, 3, 0.5,1.0/3), (1, 2, 3, 0.5,1.0/3),(1, 2, 3, 0.5,1.0/3),(1, 2, 3, 0.5,1.0/3),(1, 2, 3, 0.5,1.0/3))
         else:
             self.anchor_ratios = anchor_ratios
             
@@ -158,7 +182,7 @@ class SSD(nn.Block):
 
         self.stage_0, self.stage_1, self.stage_2, self.stage_3, self.stage_4, self.stage_5 = nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(),nn.Sequential(), nn.Sequential()
 
-        backbone_name = "resnet50"
+        backbone_name = "resnet34"
         backbone = BACKBONE(backbone_name)
         if backbone_name == "":
             backbone.initialize(init=mx.initializer.Xavier())
@@ -169,16 +193,11 @@ class SSD(nn.Block):
                 
 
         self.stage_0.add( backbone, cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors))
-        self.stage_1.add(
-            #INCEPTION_BLOCK(256)
-            conv_layer(128,3,1,1),
-            conv_layer(128,3,1,1),
-        )
-        
-        self.stage_2.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        self.stage_3.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        self.stage_4.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
-        self.stage_5.add( down_sample_blk(128*2), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_1.add( down_sample_blk(((1024,3,1,2,1),(1024,1,0,1,1))), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_2.add( down_sample_blk(((256,1,0,1,1),(512,3,1,2,2))), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_3.add( down_sample_blk(((128,1,0,1,1),(256,3,1,2,2))), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_4.add( down_sample_blk(((128,1,0,1,1),(256,3,1,2,1))), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
+        self.stage_5.add( down_sample_blk(((128,1,0,1,1),(256,3,1,2,1))), cls_predictor(self.num_anchors, self.num_classes), bbox_predictor(self.num_anchors) )
 
         #self.stage_0[0].initialize(init=mx.initializer.Xavier())
         self.stage_0[1].initialize(init=mx.initializer.Xavier())
@@ -192,29 +211,159 @@ class SSD(nn.Block):
         
         return
     def forward(self, X):
-        anchors, cls_preds, bbox_preds = [None] * 5, [None] * 5, [None] * 5
+        anchors, cls_preds, bbox_preds = [None] * 6, [None] * 6, [None] * 6
         #print(X.shape)
         X,anchors[0], cls_preds[0], bbox_preds[0] = blk_forward(X, self.stage_0[0], self.anchor_sizes[0], self.anchor_ratios[0], self.stage_0[1], self.stage_0[2])
         #print(X.shape)
-        X = self.stage_1(X)
+        X,anchors[1], cls_preds[1], bbox_preds[1] = blk_forward(X, self.stage_1[0], self.anchor_sizes[1], self.anchor_ratios[1], self.stage_1[1], self.stage_1[2])
         #print(X.shape)
-        X,anchors[1], cls_preds[1], bbox_preds[1] = blk_forward(X, self.stage_2[0], self.anchor_sizes[1], self.anchor_ratios[1], self.stage_2[1], self.stage_2[2])
+        X,anchors[2], cls_preds[2], bbox_preds[2] = blk_forward(X, self.stage_2[0], self.anchor_sizes[2], self.anchor_ratios[2], self.stage_2[1], self.stage_2[2])
         #print(X.shape)
-        X,anchors[2], cls_preds[2], bbox_preds[2] = blk_forward(X, self.stage_3[0], self.anchor_sizes[2], self.anchor_ratios[2], self.stage_3[1], self.stage_3[2])
+        X,anchors[3], cls_preds[3], bbox_preds[3] = blk_forward(X, self.stage_3[0], self.anchor_sizes[3], self.anchor_ratios[3], self.stage_3[1], self.stage_3[2])
         #print(X.shape)
-        X,anchors[3], cls_preds[3], bbox_preds[3] = blk_forward(X, self.stage_4[0], self.anchor_sizes[3], self.anchor_ratios[3], self.stage_4[1], self.stage_4[2])
+        X,anchors[4], cls_preds[4], bbox_preds[4] = blk_forward(X, self.stage_4[0], self.anchor_sizes[4], self.anchor_ratios[4], self.stage_4[1], self.stage_4[2])
         #print(X.shape)
-        X,anchors[4], cls_preds[4], bbox_preds[4] = blk_forward(X, self.stage_5[0], self.anchor_sizes[4], self.anchor_ratios[4], self.stage_5[1], self.stage_5[2])
+        X,anchors[5], cls_preds[5], bbox_preds[5] = blk_forward(X, self.stage_5[0], self.anchor_sizes[5], self.anchor_ratios[5], self.stage_5[1], self.stage_5[2])
         # reshape函数中的0表示保持批量大小不变
         #print(X.shape)
         return (nd.concat(*anchors, dim=1), concat_preds(cls_preds).reshape( (0, -1, self.num_classes + 1)), concat_preds(bbox_preds))
 
+#############################################################################
+#############################################################################
+from gluoncv.model_zoo.ssd.target import SSDTargetGenerator
+def ssd_forward_one(Y, size, ratio, cls_predictor, bbox_predictor):
+   # Y = blk(X) #提取特征
+    #anchors = contrib.ndarray.MultiBoxPrior(Y, sizes=size, ratios=ratio,steps=(1,1),offsets=(0.5,0.5)) #获得anchor
+    anchors = contrib.ndarray.MultiBoxPrior(Y, sizes=size, ratios=ratio) #获得anchor
+    cls_preds = cls_predictor(Y) #预测类别 （这不是上面定义的函数，而是其具体实现，即一个卷积层）
+    bbox_preds = bbox_predictor(Y) #预测边界框 （这不是上面定义的函数，而是其具体实现，即一个卷积层）
+    return (anchors, cls_preds, bbox_preds)
+
+def get_vgg16_300():
+    pretrained = vgg16_atrous_300(pretrained=True)
+    body = gluon.nn.Sequential()
+    with body.name_scope():
+        body.add(pretrained)
+    return body
+
+class SSD(nn.Block):
+    def __init__(self, num_classes, anchor_sizes=None, anchor_ratios=None, backbone=None, **kwargs):
+        super(SSD, self).__init__(**kwargs)
+        self.num_classes = num_classes
+
+        if anchor_sizes is None:
+            self.anchor_sizes = calc_anchor_sizes((0.2, 0.9), 6)
+        else:
+            self.anchor_sizes = anchor_sizes
+
+        if anchor_ratios is None:
+            self.anchor_ratios = (
+                    (1, 2, 0.5), (1, 2, 3, 0.5, 1.0 / 3), (1, 2, 3, 0.5, 1.0 / 3), (1, 2, 3, 0.5, 1.0 / 3), (1, 2, 0.5), (1, 2, 0.5))
+        else:
+            self.anchor_ratios = anchor_ratios
+
+        num_anchors = []
+        for size, ratio in zip(self.anchor_sizes, self.anchor_ratios):
+            num_anchors.append( len(size) + len(ratio) - 1 )
+
+        self.stage_0, self.stage_1, self.stage_2, self.stage_3, self.stage_4, self.stage_5 = nn.Sequential(prefix="decode_0"), nn.Sequential(), nn.Sequential(), nn.Sequential(), nn.Sequential(), nn.Sequential()
+
+
+        backbone = get_vgg16_300()
+        print("using pretrained backbone: vgg16_atrous_300")
+        backbone.collect_params().setattr("lr_mult", 0.1)
+
+        self.backbone = backbone
+        with self.stage_0.name_scope():
+            self.stage_0.add(
+                             cls_predictor(num_anchors[0], self.num_classes), bbox_predictor(num_anchors[0]))
+        self.stage_1.add(
+                         cls_predictor(num_anchors[1], self.num_classes), bbox_predictor(num_anchors[1]))
+        self.stage_2.add(
+                         cls_predictor(num_anchors[2], self.num_classes), bbox_predictor(num_anchors[2]))
+        self.stage_3.add(
+                         cls_predictor(num_anchors[3], self.num_classes), bbox_predictor(num_anchors[3]))
+        self.stage_4.add(
+                         cls_predictor(num_anchors[4], self.num_classes), bbox_predictor(num_anchors[4]))
+        self.stage_5.add(
+                         cls_predictor(num_anchors[5], self.num_classes), bbox_predictor(num_anchors[5]))
+
+        # self.stage_0[0].initialize(init=mx.initializer.Xavier())
+        self.stage_0.initialize(init=mx.initializer.Xavier())
+        self.stage_1.initialize(init=mx.initializer.Xavier())
+        self.stage_2.initialize(init=mx.initializer.Xavier())
+        self.stage_3.initialize(init=mx.initializer.Xavier())
+        self.stage_4.initialize(init=mx.initializer.Xavier())
+        self.stage_5.initialize(init=mx.initializer.Xavier())
+
+        return
+
+    def forward(self, X):
+        anchors, cls_preds, bbox_preds = [None] * 6, [None] * 6, [None] * 6
+        # print(X.shape)
+        Xs = self.backbone(X)
+        anchors[0], cls_preds[0], bbox_preds[0] = ssd_forward_one(Xs[0], self.anchor_sizes[0],
+                                                                 self.anchor_ratios[0], self.stage_0[0],
+                                                                 self.stage_0[1])
+       # print(anchors[0].shape, cls_preds[0].shape, bbox_preds[0].shape)
+        anchors[1], cls_preds[1], bbox_preds[1] = ssd_forward_one(Xs[1], self.anchor_sizes[1],
+                                                                 self.anchor_ratios[1], self.stage_1[0],
+                                                                 self.stage_1[1])
+        # print(X.shape)
+        anchors[2], cls_preds[2], bbox_preds[2] = ssd_forward_one(Xs[2], self.anchor_sizes[2],
+                                                                 self.anchor_ratios[2], self.stage_2[0],
+                                                                 self.stage_2[1])
+        # print(X.shape)
+        anchors[3], cls_preds[3], bbox_preds[3] = ssd_forward_one(Xs[3],  self.anchor_sizes[3],
+                                                                 self.anchor_ratios[3], self.stage_3[0],
+                                                                 self.stage_3[1])
+        # print(X.shape)
+        anchors[4], cls_preds[4], bbox_preds[4] = ssd_forward_one(Xs[4], self.anchor_sizes[4],
+                                                                 self.anchor_ratios[4], self.stage_4[0],
+                                                                 self.stage_4[1])
+        # print(X.shape)
+        anchors[5], cls_preds[5], bbox_preds[5] = ssd_forward_one(Xs[5],  self.anchor_sizes[5],
+                                                                 self.anchor_ratios[5], self.stage_5[0],  #last bug!!
+                                                                 self.stage_5[1])
+        # reshape函数中的0表示保持批量大小不变
+        # print(X.shape)
+        return (nd.concat(*anchors, dim=1), concat_preds(cls_preds).reshape((0, -1, self.num_classes + 1)),
+                concat_preds(bbox_preds))
+
+
 if 0:
-    net = SSD(10)
+    net = get_vgg16_300()
     ctx = mx.gpu()
     net.collect_params().reset_ctx(ctx)
     x = nd.zeros((32,3,300,300),ctx=ctx)
     y = net(x)
+    print(net)
+    print(x.shape)
+    for k in range(len(y)):
+        print(y[k].shape)       
+
+
+if 0:
+    net = model_zoo.get_model('ssd_300_vgg16_atrous_voc', pretrained=False, pretrained_base=False)
+    ctx = mx.gpu()
+    net.initialize()
+    net.collect_params().reset_ctx(ctx)
+    x = nd.zeros((32,3,300,300),ctx=ctx)
+    y = net(x)
+    print(net)
+    print(x.shape)
+    for k in range(len(y)):
+        print(y[k].shape)       
+
+
+
+if 0:
+    net = SSD(21)
+    ctx = mx.gpu()
+    net.collect_params().reset_ctx(ctx)
+    x = nd.zeros((32,3,300,300),ctx=ctx)
+    y = net(x)
+    print(net.collect_params())
     print(y[0].shape)
     print(y[1].shape)
     print(y[2].shape)
