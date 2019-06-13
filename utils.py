@@ -322,7 +322,8 @@ def ssd_calc_loss_slow(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_mask
 
 def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
-    bbox_loss = gluon.loss.L1Loss()
+    #bbox_loss = gluon.loss.L1Loss()
+    bbox_loss = gluon.loss.HuberLoss()
     #print(cls_preds.shape, cls_labels.shape)
 
     batch_size,anchor_size,cls_num = cls_preds.shape
