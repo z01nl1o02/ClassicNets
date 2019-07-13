@@ -3,13 +3,11 @@ import mxnet as mx
 from mxnet import nd
 
 def conv_layer(out_channel,kernel_size, padding,strides):
-	stages = nn.Sequential()
-	stages.add(
-              nn.Conv2D(out_channel, kernel_size=kernel_size, padding=padding, strides = strides),
-              nn.BatchNorm(), 
-	      nn.Activation("relu")
-           )
-        return stages
+    stages = nn.Sequential()
+    stages.add(nn.Conv2D(out_channel, kernel_size=kernel_size, padding=padding, strides = strides),
+    #nn.BatchNorm(), nn.Activation("relu")
+    )
+    return stages
 
 class FIRE(nn.Block):
     def __init__(self,sizes):
@@ -45,12 +43,12 @@ class SQUEEZENET(nn.Block):
                 nn.MaxPool2D(pool_size=3,strides=2),
                 FIRE( (64,256,256) ),
                 nn.Dropout(0.5),
-	        conv_layer(number_classes, 1, 0, 1),
+                conv_layer(number_classes, 1, 0, 1),
                 nn.GlobalAvgPool2D(),
-		nn.Flatten()
-        )
+                nn.Flatten())
         return
-    def forward(self,X):            
+
+    def forward(self, X):
         return self.stages(X)
 
 def load(num_classes,config_first_conv = (96,7,0,2)):
