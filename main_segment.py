@@ -11,10 +11,10 @@ if __name__=="__main__":
 
     ctx = mx.gpu(0)
     batch_size = 16
-    num_epochs = 100
-    base_lr = 0.001 #should be small for model with pretrained model
+    num_epochs = 30
+    base_lr = 0.01 #should be small for model with pretrained model
     wd = 0.0005
-    net_name = "fcn" #"unet"
+    net_name = "unet" #"unet"
     dataset_name = 'segment_voc_human'
     label_scale = 1 #8 4 2 1     #enet train from raw to fine
     #load_to_train = False
