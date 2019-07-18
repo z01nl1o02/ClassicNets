@@ -51,13 +51,14 @@ class CUB200(mx.gluon.data.Dataset):
         image = np.float32(image) / 255.0
         image = mx.nd.array(image)
 
-        data_shape = (3,244,244)
+        data_shape = (3,224,224)
         if self._fortrain:
-            augs = mx.image.CreateAugmenter(data_shape=data_shape, resize=244, rand_mirror=True, rand_crop=True,
-                                         brightness = 0.5,contrast = 0.5, saturation  = 0.5, hue = 0.5,
+            augs = mx.image.CreateAugmenter(data_shape=data_shape, resize=0, rand_mirror=True, rand_crop=True,
+             #                            brightness = 0.5,contrast = 0.5, 
+                                         #saturation  = 0.5, hue = 0.5,
                                          mean=self._mean, std=self._std)
         else:
-            augs = mx.image.CreateAugmenter(data_shape=data_shape, resize=244, rand_mirror=False, rand_crop=False,
+            augs = mx.image.CreateAugmenter(data_shape=data_shape, resize=0, rand_mirror=False, rand_crop=False,
                                          mean=self._mean, std=self._std)
 
         for aug in augs:
@@ -80,8 +81,8 @@ class CUB200(mx.gluon.data.Dataset):
 def load(batch_size):
     trainset = CUB200(True)
     testset = CUB200(False)
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=-2)
-    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=-2)
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=3)
+    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=3)
     print('cub200: train {} test {}'.format(len(trainset), len(testset)))
     return train_iter, test_iter, trainset.get_class_names()
 
