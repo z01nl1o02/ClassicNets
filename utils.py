@@ -593,6 +593,31 @@ def train_and_predict_rnn_gluon(model,
                 ))
 
 
+class DiceLoss(mx.gluon.Block):
+    def __init__(self,smooth=0.01, from_logists=False, axis=-1, sparse_label = True):
+        super(DiceLoss, self).__init__()
+        self.smooth = smooth
+        self.from_logists = from_logists
+        self.axis = axis
+        self.sparse_label = sparse_label
+        return
+    def forward(self, pred, label):
+        num = pred.shape[0]
+        if not self.from_logists:
+            pred = nd.softmax(pred, self.axis)
+        if self.sparse_label:
+            with autograd.pause():
+                label_dense = nd.zeros_like(pred)
+                for l in range(label_dense.shape[1]):
+                    label_dense[:,l,:] = (label == l) * 1.0
+                label = label_dense
+        pred, label = nd.reshape(pred, (num,-1)), nd.reshape(label,(num,-1))
+        union = pred.sum() + label.sum()
+        inter = (pred * label).sum()
+        return (2 * inter + self.smooth) / (self.smooth + union)
+
+
+
 
 
 
