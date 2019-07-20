@@ -51,7 +51,7 @@ class CUB200(mx.gluon.data.Dataset):
         image = np.float32(image) / 255.0
         image = mx.nd.array(image)
 
-        data_shape = (3,224,224)
+        data_shape = (3,244,244)
         if self._fortrain:
             augs = mx.image.CreateAugmenter(data_shape=data_shape, resize=0, rand_mirror=True, rand_crop=True,
              #                            brightness = 0.5,contrast = 0.5, 

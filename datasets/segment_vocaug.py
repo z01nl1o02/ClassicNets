@@ -126,13 +126,11 @@ def get_class_names():
     return names.split(',')
 import platform
 def load(batch_size,scale):
-    root = "E:/dataset/VOCdevkit/"
-    if platform.system() == "Linux":
-        root = "/home/c001/data/VOCdevkit/"
+    root = os.path.join(os.getenv("ENV_DATASET_DIR"), "VOCdevkit")        
     trainset = DatasetVOCAug(voc_sdk_root=os.path.join(root,"VOCaug/dataset"),fortrain=True,label_scale=scale)
     testset = DatasetVOCAug(voc_sdk_root=os.path.join(root,"VOCaug/dataset"),fortrain=False,label_scale=scale)
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover")
-    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=3)
+    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=3)
     return train_iter, test_iter, len(trainset)
 
 if 0:
