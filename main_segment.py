@@ -1,7 +1,7 @@
 import mxnet as mx
 from mxnet.gluon import Trainer
-from utils import FocusLoss,WeightCELoss
-from datasets import thread,segment_voc,segment_vocaug,segment_voc_human
+from utils import FocusLoss,WeightCELoss,DiceLoss
+from datasets import thread,segment_voc,segment_vocaug,segment_voc_human,cub200
 from networks import fcn,enet,unet
 from utils import train_seg,MIOU
 import os
@@ -10,12 +10,12 @@ import os
 if __name__=="__main__":
 
     ctx = mx.gpu(0)
-    batch_size = 16
-    num_epochs = 30
-    base_lr = 0.01 #should be small for model with pretrained model
+    batch_size = 24
+    num_epochs = 100
+    base_lr = 0.001 #should be small for model with pretrained model
     wd = 0.0005
     net_name = "unet" #"unet"
-    dataset_name = 'segment_voc_human'
+    dataset_name = 'vocaug'
     label_scale = 1 #8 4 2 1     #enet train from raw to fine
     #load_to_train = False
     output_folder = os.path.join("output")
@@ -53,7 +53,6 @@ if __name__=="__main__":
     #for key in net.collect_params():
     #    print(key)
 
-    print("train set size = ",num_train)
 
     net.collect_params().reset_ctx(ctx)
 
@@ -63,13 +62,13 @@ if __name__=="__main__":
     #lr_sch = mx.lr_scheduler.FactorScheduler(num_epochs *  iter_per_epoch//3,factor=0.1,stop_factor_lr=1e-8)
     #lr_sch.base_lr = base_lr
 
-    trainer = Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":wd})
+    trainer = Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":wd,"momentum":0.9})
 
     #loss = FocusLoss(axis=1,gamma=1)
     weight_class = [1.0 for k in range(len(class_names))]
-    #weight_class[0] = 0.01
+#    weight_class[0] = 0.01
     loss = WeightCELoss(axis=1, weight_classes = weight_class)
-
+    #loss = DiceLoss()
 
     mIoU = MIOU(class_names)
 
