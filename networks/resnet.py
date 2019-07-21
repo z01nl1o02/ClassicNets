@@ -1,6 +1,8 @@
 from mxnet.gluon import nn
 from mxnet import nd
 import mxnet as mx
+import gluoncv
+from gluoncv.model_zoo import get_model
 
 class Residual(nn.Block):
     def __init__(self, num_channels, use_1x1conv=False, strides=1, **kwargs):
@@ -129,8 +131,23 @@ class ResNet164_v2(nn.HybridBlock):
             if self.verbose:
                 print('Block %d output: %s' % (i + 1, out.shape))
         return out    
-    
-def load(type,num_classes):
+
+class resnet_pretrained(nn.Block):
+    def __init__(self, num_classes):
+        super(resnet_pretrained,self).__init__()
+        model_name = "ResNet50_v2"
+        self.net = get_model(model_name,pretrained=True)
+        with self.net.name_scope():
+            self.net.output = nn.Dense(num_classes)
+        self.net.output.initialize(mx.init.Xavier())
+        return
+    def forward(self,X):
+        return self.net(X)
+
+def load(type,num_classes,pretrained = False):
+    if pretrained:
+        net = resnet_pretrained(num_classes)
+        return net
     if type == "resnet-18":
         return resnet_18(num_classes)
     if type == "resnet-164":
