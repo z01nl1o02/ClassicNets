@@ -58,6 +58,14 @@ def pascal_palette_two_classes(): #RGB mode
 #test loss 0.185477201716778 ('mIOU', 0.7032873101235821)
 #(background:0.960) (head:0.717) (body-top:0.630) (arm:0.546) (body-down:0.664)
 
+#unet with backbone(vgg11)
+#epoch 20 lr 0.00299902043101
+#train loss 0.134941463817 ('mIOU', 0.7752389090620341)
+#test loss 0.172844283925 ('mIOU', 0.7319298261321874)
+#(background:0.967) (head:0.772) (body-top:0.661) (arm:0.579) (body-down:0.680)
+
+
+
 #fcn
 #epoch 60 lr 0.0003899076406381192
 #train loss 0.16698957751127935 ('mIOU', 0.7317492723372205)
@@ -196,8 +204,8 @@ def load(batch_size,scale):
     root = os.getenv("ENV_DATASET_DIR")
     trainset = DatasetVOC(voc_sdk_root=os.path.join(root,"humanparsing"),fortrain=True,label_scale=scale)
     testset = DatasetVOC(voc_sdk_root=os.path.join(root,"humanparsing"),fortrain=False,label_scale=scale)
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=2)
-    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover")
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=3)
+    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover", num_workers=3)
     return train_iter, test_iter, len(trainset)
 
 if 0:
