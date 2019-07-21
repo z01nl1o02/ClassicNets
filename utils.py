@@ -618,9 +618,28 @@ class DiceLoss(mx.gluon.Block):
 
 
 
+class LabelSmoothSCE(gluon.loss.SoftmaxCrossEntropyLoss):
+    def __init__(self, smooth = 0.1, **kwargs):
+        super(LabelSmoothSCE, self).__init__(**kwargs)
+        self._sparse_label = False
+        self._smooth = smooth
+        return
+    def hybrid_forward(self, F, pred, label):
+        with autograd.pause():
+            label_dense = F.zeros_like(pred) + self._smooth
+            for b in range(pred.shape[0]):
+                label_dense[b,label[b]] = 1 - self._smooth
+            print(label_dense)
+        return super(LabelSmoothSCE,self).hybrid_forward(F,pred, label_dense)
 
 
-
+if 0:
+    label = nd.zeros((10,))
+    label[3] = 2
+    pred = nd.random.uniform(0,1,shape = (10,4))
+    loss = LabelSmoothSCE()
+    loss_value = loss(pred,label)
+    print('loss value: ', loss_value)
 
 
 class FocusLoss(mx.gluon.loss.Loss):
