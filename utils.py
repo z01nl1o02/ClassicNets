@@ -614,7 +614,7 @@ class DiceLoss(mx.gluon.Block):
         pred, label = nd.reshape(pred, (num,-1)), nd.reshape(label,(num,-1))
         union = pred.sum() + label.sum()
         inter = (pred * label).sum()
-        return (2 * inter + self.smooth) / (self.smooth + union)
+        return 1 - (2 * inter + self.smooth) / (self.smooth + union)
 
 
 
