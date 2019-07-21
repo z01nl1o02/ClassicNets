@@ -3,6 +3,13 @@ from mxnet import gluon
 import cv2,random,os
 import numpy as np
 
+#round 1: resnettop_acc_120_0.271
+#finetune: resnettop_acc_70_0.302
+#reduce color augment: resnettop_acc_80_0.347
+#reduce contrast/bright augment and set large baseLR :resnettop_acc_90_0.444
+#reduce resizing: resnettop_acc_90_0.546
+#finetune-based-on-resnet50:  resnettop_acc_30_0.77 (only mirror and random-crop)
+
 class CUB200(mx.gluon.data.Dataset):
     def __init__(self,fortrain,root=None,resize=None):
         super(CUB200,self).__init__()
