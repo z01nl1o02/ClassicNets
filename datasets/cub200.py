@@ -9,6 +9,7 @@ import numpy as np
 #reduce contrast/bright augment and set large baseLR :resnettop_acc_90_0.444
 #reduce resizing: resnettop_acc_90_0.546
 #finetune-based-on-resnet50:  resnettop_acc_30_0.77 (only mirror and random-crop)
+#finetune-based-on-resnet50 + LabelSmooth:  resnettop_acc_30_0.79 (only mirror and random-crop)
 
 class CUB200(mx.gluon.data.Dataset):
     def __init__(self,fortrain,root=None,resize=None):
@@ -61,7 +62,7 @@ class CUB200(mx.gluon.data.Dataset):
         data_shape = (3,244,244)
         if self._fortrain:
             augs = mx.image.CreateAugmenter(data_shape=data_shape, resize=0, rand_mirror=True, rand_crop=True,
-             #                            brightness = 0.5,contrast = 0.5, 
+                                         brightness = 0.5,contrast = 0.5, 
                                          #saturation  = 0.5, hue = 0.5,
                                          mean=self._mean, std=self._std)
         else:
@@ -88,8 +89,8 @@ class CUB200(mx.gluon.data.Dataset):
 def load(batch_size):
     trainset = CUB200(True)
     testset = CUB200(False)
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=3)
-    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=3)
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=-3)
+    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=-3)
     print('cub200: train {} test {}'.format(len(trainset), len(testset)))
     return train_iter, test_iter, trainset.get_class_names()
 
