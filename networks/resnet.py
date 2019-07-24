@@ -137,6 +137,7 @@ class resnet_pretrained(nn.Block):
         super(resnet_pretrained,self).__init__()
         model_name = "ResNet50_v2"
         self.net = get_model(model_name,pretrained=True)
+        self.net.collect_params().setattr("lr_mult",0.1)
         with self.net.name_scope():
             self.net.output = nn.Dense(num_classes)
         self.net.output.initialize(mx.init.Xavier())
@@ -147,6 +148,7 @@ class resnet_pretrained(nn.Block):
 def load(type,num_classes,pretrained = False):
     if pretrained:
         net = resnet_pretrained(num_classes)
+        print("trained resnet loaded")
         return net
     if type == "resnet-18":
         return resnet_18(num_classes)
