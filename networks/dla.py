@@ -11,7 +11,9 @@ class agg_block(nn.Block):
         with self.name_scope():
             self.downsampling = nn.Sequential()
             self.downsampling.add(
-                nn.Conv2D(in_channels=inch, channels=outch, kernel_size=3, padding=1, strides=2)
+                nn.Conv2D(in_channels=inch, channels=outch, kernel_size=3, padding=1, strides=2),
+                nn.BatchNorm(),
+                nn.Activation("relu")
             )
             self.bn = nn.BatchNorm()
             self.relu = nn.Activation("relu")
@@ -22,17 +24,17 @@ class agg_block(nn.Block):
         y = self.relu(self.bn(y))
         return y
 
-class resnet_pretrained(nn.Block):
-    def __init__(self, num_classes):
-        super(resnet_pretrained,self).__init__()
+class DLA_IDL(nn.Block):
+    def __init__(self, num_classes,pretrained=True):
+        super(DLA_IDL,self).__init__()
         model_name = "ResNet50_v2"
-        backbone = get_model(model_name,pretrained=True)
+        backbone = get_model(model_name,pretrained=pretrained)
         backbone.collect_params().setattr("lr_mult",0.1)
 
-        for ind,feat in enumerate(backbone.features):
-            print(feat.name, ind)
-        self.output_inds = [5,6,7,8]
-        self.backbone = backbone.features[0:9]
+       #for ind,feat in enumerate(backbone.features):
+        #    print(feat.name, ind)
+        self.output_inds = [5,6,7,10]
+        self.backbone = backbone.features[0:11]
 
 
         self.agg_blocks = nn.Sequential()
@@ -71,11 +73,13 @@ class resnet_pretrained(nn.Block):
 
         return y
 
+def load(class_num):
+    net = DLA_IDL(class_num)
+    return net
 
 
 
-
-if 1:
+if 0:
     ctx = mx.gpu()
     net = resnet_pretrained(10)
     net.collect_params().reset_ctx(ctx)
