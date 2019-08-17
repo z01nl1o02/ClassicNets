@@ -257,6 +257,12 @@ class DETECT_VOC(gluon.data.Dataset):
 
     def data_aug_shuffle(self,src,bbox,p = 0.5):
         src = src.astype(np.float32)
+        r = random.random()
+        if r < 0.4:
+            src,bbox = self.ExpandImage(src,bbox)
+        elif r < 0.8:
+            src,bbox = self.BatchSample(src,bbox)
+               
         if random.random() < p:
             src = self.Shuffle_channle(src)
         if random.random() < p:
@@ -271,10 +277,10 @@ class DETECT_VOC(gluon.data.Dataset):
             src = self.SmoothAug(src)
         if random.random() < p:
             src = self.RandomGrayAug(src)
-        if random.random() < p:
-            src,bbox = self.ExpandImage(src,bbox)
-        if random.random() < p:
-            src,bbox = self.BatchSample(src,bbox)
+      #  if random.random() < p:
+      #      src,bbox = self.ExpandImage(src,bbox)
+      #  if random.random() < p:
+      #      src,bbox = self.BatchSample(src,bbox)
         return src,bbox
 
 

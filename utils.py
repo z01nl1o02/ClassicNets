@@ -320,7 +320,31 @@ def ssd_calc_loss_slow(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_mask
     
     return (cls + bbox).sum()
 
+
+def ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
+    CLSLoss_func = gluon.loss.SoftmaxCrossEntropyLoss(from_logits = True)
+    BBOXLoss_func = gluon.loss.HuberLoss()
+
+    valid_anchor_num = (cls_labels > 0).sum(axis=-1)
+    #batch_size = cls_preds.shape[0]
+    anchor_num = cls_preds.shape[1]
+
+    cls_preds = nd.log_softmax(cls_preds,axis=-1)
+    temp = nd.repeat(cls_labels.reshape((0,0,1)),axis=-1, repeats=cls_preds.shape[-1])
+    cls_preds = nd.where(temp > 0, cls_preds, nd.zeros_like(cls_preds)) #only fg used for loss, all others set to 0
+    cls_labels_mask = nd.where(cls_labels >= 0, cls_labels, nd.zeros_like(cls_labels))
+    loss_cls = CLSLoss_func(cls_preds, cls_labels_mask) * anchor_num
+
+    bbox_preds = nd.reshape_like(bbox_preds, bbox_labels) * bbox_masks
+    loss_bbox = BBOXLoss_func(bbox_preds, bbox_labels) * anchor_num
+
+    loss_cls = (loss_cls / valid_anchor_num).sum()
+    loss_bbox = (loss_bbox / valid_anchor_num).sum()
+    return loss_cls + loss_bbox, loss_cls, loss_bbox
+
+
 def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
+
     cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
     #bbox_loss = gluon.loss.L1Loss()
     bbox_loss = gluon.loss.HuberLoss()
@@ -329,7 +353,8 @@ def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
     batch_size,anchor_size,cls_num = cls_preds.shape
     cls_preds_ = nd.reshape(cls_preds, (-1,cls_preds.shape[-1]))
     cls_labels_ = nd.reshape(cls_labels, (-1,1))
-    cls_mask = (cls_labels_[:,0] >= 0).reshape( cls_labels_.shape  )
+    #cls_mask = (cls_labels_[:,0] >= 0).reshape( cls_labels_.shape  ) #???? including background?
+    cls_mask = (cls_labels_[:, 0] > 0).reshape(cls_labels_.shape)  # ???? including background?
 
     indices =  nd.array( np.where( cls_mask.asnumpy() > 0)[0], ctx = cls_preds.context )
 
@@ -424,8 +449,51 @@ def test_ssd(net, valid_iter, ctx):
         loss_cls, loss_bbox, loss, time.time() - start))
     return
     
-    
+from tools import ssd as ssdtool
+def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
+    logger.info("===================START TRAINING====================")
+    start = time.time()
+    AssignTargetFor = ssdtool.AssginTarget()
+    for epoch in range(num_epochs):
+        #acc_hist, mae_hist = [],[]
+        loss_cls_hist, loss_bbox_hist = [], []
+        loss_hist = []
+        trainer.set_learning_rate(lr_sch(epoch))
+        for batch in train_iter:
+            X = batch[0].as_in_context(ctx)
+            Y = batch[1].as_in_context(ctx)
+            with autograd.record():
+                # 生成多尺度的锚框，为每个锚框预测类别和偏移量
+                anchors, cls_preds, bbox_preds = net(X)
+                cls_labels, bbox_labels, bbox_masks = AssignTargetFor(anchors, cls_preds, bbox_preds, Y)
+               # bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
+                #    anchors, Y, cls_preds.transpose((0, 2, 1)), negative_mining_ratio = 3.0)
+                # 根据类别和偏移量的预测和标注值计算损失函数
+                l,l_cls, l_bbox = ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox_labels,
+                              bbox_masks)
+            l.backward()
+            trainer.step(batch_size)
+            nd.waitall()
+            loss_hist.append( l.asnumpy()[0] / batch_size )
+            loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
+            loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
+
+        if (epoch + 1)%2 == 0:
+            loss = np.asarray(loss_hist).mean()
+            loss_bbox = np.mean(loss_bbox_hist)
+            loss_cls = np.mean(loss_cls_hist)
+            logger.info('epoch %2d, class loss %.5e, bbox loss %.5e, loss %.5e, lr %.5e time %.1f sec' % (
+                epoch + 1, loss_cls,loss_bbox, loss, trainer.learning_rate, time.time() - start))
+            start = time.time() #restart
+
+        if (epoch + 1) % 50 == 0:
+            test_ssd(net,valid_iter,ctx)
+            net.save_parameters("{}_epoch{}.params".format(save_prefix,epoch))
+
+
 def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
+    train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix)
+    return
     logger.info("===================START TRAINING====================")
     start = time.time()
     for epoch in range(num_epochs):
