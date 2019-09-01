@@ -4,7 +4,7 @@ from mxnet.gluon import Trainer
 from mxnet import lr_scheduler,nd
 from datasets import detect_voc
 from networks import ssd
-from utils import train_ssd,predict_ssd
+from utils import train_ssd, train_ssd_custom,predict_ssd
 from tools import lr_schs
 import os,pdb,cv2
 
@@ -52,7 +52,7 @@ if __name__=="__main__":
     trainer = Trainer(net.collect_params(),optimizer="sgd",optimizer_params={"wd":wd,"momentum":momentum})
 
 
-    train_ssd(net,train_iter,test_iter,batch_size,trainer,ctx, num_epochs, lr_sch, output_prefix)
+    train_ssd_custom(net,train_iter,test_iter,batch_size,trainer,ctx, num_epochs, lr_sch, output_prefix)
 
 
 

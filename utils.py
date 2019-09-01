@@ -422,13 +422,13 @@ def predict_ssd(net,X):
     if len(idx) < 1:
         return mx.nd.zeros((1,output.shape[-1])) - 1
     return output[0, idx]  
-    
-    
+
+from tqdm import tqdm
 def test_ssd(net, valid_iter, ctx):
     start = time.time()
     loss_cls_hist, loss_bbox_hist = [], []
     loss_hist = []
-    for batch in valid_iter:        
+    for batch in valid_iter:
         X = batch[0].as_in_context(ctx)
         Y = batch[1].as_in_context(ctx)        
         anchors, cls_preds, bbox_preds = net(X)
@@ -448,14 +448,20 @@ def test_ssd(net, valid_iter, ctx):
     logger.info('\t test class loss %.5e, bbox loss %.5e, loss %.5e, time %.1f sec' % ( 
         loss_cls, loss_bbox, loss, time.time() - start))
     return
+import gluoncv as gcv
 
 from tools import ssd as ssdtool
+from tqdm import tqdm
 def test_ssd_custom(net, valid_iter, ctx):
+    mAP = gcv.utils.metrics.voc_detection.VOC07MApMetric(iou_thresh=0.5, class_names=('aeroplane', 'bicycle', 'bird',
+                         'boat', 'bottle', 'bus', 'car', 'cat', 'chair','cow', 'diningtable', 'dog', 'horse',
+                          'motorbike', 'person', 'pottedplant','sheep', 'sofa', 'train', 'tvmonitor'))
     start = time.time()
     loss_cls_hist, loss_bbox_hist = [], []
     loss_hist = []
+    Predict = ssdtool.Prediction(["{}".format(x) for x in range(20)])
     AssignTargetFor = ssdtool.AssginTarget()
-    for batch in valid_iter:
+    for batch in tqdm(valid_iter):
         X = batch[0].as_in_context(ctx)
         Y = batch[1].as_in_context(ctx)
         anchors, cls_preds, bbox_preds = net(X)
@@ -465,18 +471,29 @@ def test_ssd_custom(net, valid_iter, ctx):
         loss_hist.append( l.asnumpy()[0] / X.shape[0] )
         loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
         loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
+        ids, scores, bboxes = Predict(anchors.as_in_context(mx.cpu()), cls_preds.as_in_context(mx.cpu()), bbox_preds.as_in_context(mx.cpu()))
+        gt_bboxes = nd.slice_axis(batch[1],axis=-1, begin=1,end=None)
+        gt_lables = nd.slice_axis(batch[1],axis=-1, begin=0,end=1)
+        mAP.update(pred_bboxes=bboxes, pred_labels=ids,pred_scores=scores,gt_bboxes=gt_bboxes, gt_labels = gt_lables)
     loss = np.asarray(loss_hist).mean()
     loss_bbox = np.mean(loss_bbox_hist)
     loss_cls = np.mean(loss_cls_hist)
     logger.info('\t test class loss %.5e, bbox loss %.5e, loss %.5e, time %.1f sec' % (
         loss_cls, loss_bbox, loss, time.time() - start))
-    return
+    names, values = mAP.get()
+    for name,value in zip(names,values):
+        print(name, value)
+    return values[-1]
 
 
 def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
     logger.info("===================START TRAINING====================")
     start = time.time()
     AssignTargetFor = ssdtool.AssginTarget()
+    test_ssd_custom(net, valid_iter, ctx)
+
+
+    last_map = 0
     for epoch in range(num_epochs):
         #acc_hist, mae_hist = [],[]
         loss_cls_hist, loss_bbox_hist = [], []
@@ -501,7 +518,7 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
             loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
             loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
 
-        if (epoch + 1)%2 == 0:
+        if (epoch + 1)%1 == 0:
             loss = np.asarray(loss_hist).mean()
             loss_bbox = np.mean(loss_bbox_hist)
             loss_cls = np.mean(loss_cls_hist)
@@ -509,9 +526,11 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
                 epoch + 1, loss_cls,loss_bbox, loss, trainer.learning_rate, time.time() - start))
             start = time.time() #restart
 
-        if (epoch + 1) % 50 == 0:
-            test_ssd_custom(net,valid_iter,ctx)
-            net.save_parameters("{}_epoch{}.params".format(save_prefix,epoch))
+        if (epoch + 1)%2 == 0:
+            mAP = test_ssd_custom(net,valid_iter,ctx)
+            if mAP > last_map:
+                net.save_parameters("{}_epoch{}_map{}.params".format(save_prefix,epoch,mAP))
+                last_map = mAP
 
 
 def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):

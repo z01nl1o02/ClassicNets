@@ -19,6 +19,16 @@ class Prediction(gluon.Block):
         return len(self.classes)
 
     def forward(self, anchors, pred_classes, pred_bboxes):
+        """
+        :param anchors: (1, num-of-anchor, 4), anchors[0,0,:] = cx,cy,w,h
+        :param pred_classes: (batch-size, num-of-anchor, num-of-classes), including background
+        :param pred_bboxes: (batch-size, num-of-anchor * 4)
+
+        :param ids: (batch-size, num-of-found, 1)  class id for each found
+        :param scores: (batch-size, num-of-found, 1)  class score for each found
+        :param bboxes: (batch-size, num-of-found, 4)  coordinates of each found  (x0,y0,x1,y1) with norm w/h
+        """
+        pred_bboxes = nd.reshape(pred_bboxes, (0,-1,4))
         bboxes = self.bbox_decoder(pred_bboxes, anchors)
         cls_ids, scores = self.cls_decoder(nd.softmax(pred_classes, axis=-1))
         results = []
