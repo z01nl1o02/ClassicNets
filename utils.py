@@ -448,8 +448,31 @@ def test_ssd(net, valid_iter, ctx):
     logger.info('\t test class loss %.5e, bbox loss %.5e, loss %.5e, time %.1f sec' % ( 
         loss_cls, loss_bbox, loss, time.time() - start))
     return
-    
+
 from tools import ssd as ssdtool
+def test_ssd_custom(net, valid_iter, ctx):
+    start = time.time()
+    loss_cls_hist, loss_bbox_hist = [], []
+    loss_hist = []
+    AssignTargetFor = ssdtool.AssginTarget()
+    for batch in valid_iter:
+        X = batch[0].as_in_context(ctx)
+        Y = batch[1].as_in_context(ctx)
+        anchors, cls_preds, bbox_preds = net(X)
+        cls_labels, bbox_labels, bbox_masks = AssignTargetFor(anchors, cls_preds, bbox_preds, Y)
+        l, l_cls, l_bbox = ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox_labels,
+                                                bbox_masks)
+        loss_hist.append( l.asnumpy()[0] / X.shape[0] )
+        loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
+        loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
+    loss = np.asarray(loss_hist).mean()
+    loss_bbox = np.mean(loss_bbox_hist)
+    loss_cls = np.mean(loss_cls_hist)
+    logger.info('\t test class loss %.5e, bbox loss %.5e, loss %.5e, time %.1f sec' % (
+        loss_cls, loss_bbox, loss, time.time() - start))
+    return
+
+
 def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
     logger.info("===================START TRAINING====================")
     start = time.time()
@@ -487,7 +510,7 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
             start = time.time() #restart
 
         if (epoch + 1) % 50 == 0:
-            test_ssd(net,valid_iter,ctx)
+            test_ssd_custom(net,valid_iter,ctx)
             net.save_parameters("{}_epoch{}.params".format(save_prefix,epoch))
 
 
