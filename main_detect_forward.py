@@ -44,7 +44,7 @@ net.collect_params().reset_ctx(ctx)
 
 logger.info("========ssd forward===========")
 mAP = VOC07MApMetric(class_names=None)
-thresh = 0.0
+thresh = 0.95
 
 for idx in range(len(testset)):
     feat,target = testset[idx]

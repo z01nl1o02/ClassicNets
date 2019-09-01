@@ -13,7 +13,7 @@ if __name__=="__main__":
     ctx = mx.gpu(0)
     batch_size = 32//2
     num_epochs = 500
-    base_lr = 0.01
+    base_lr = 0.001
     wd = 0.0004
     momentum = 0.9
 
