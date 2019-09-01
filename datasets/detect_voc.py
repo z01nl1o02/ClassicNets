@@ -258,10 +258,10 @@ class DETECT_VOC(gluon.data.Dataset):
     def data_aug_shuffle(self,src,bbox,p = 0.5):
         src = src.astype(np.float32)
         r = random.random()
-        if r < 0.4:
+        if r < p:
             src,bbox = self.ExpandImage(src,bbox)
-        elif r < 0.8:
-            src,bbox = self.BatchSample(src,bbox)
+        #elif r < 0.8:
+        #    src,bbox = self.BatchSample(src,bbox)
                
         if random.random() < p:
             src = self.Shuffle_channle(src)
@@ -295,7 +295,7 @@ class DETECT_VOC(gluon.data.Dataset):
                 tmp = 1.0 - targets[:, 1]
                 targets[:, 1] = 1.0 - targets[:, 3]
                 targets[:, 3] = tmp
-            img,targets = self.data_aug_shuffle(img,targets,0.7)
+            img,targets = self.data_aug_shuffle(img,targets, 0.7)
 
         img = img.astype(np.uint8)
         if self._fortrain:
@@ -326,7 +326,9 @@ def load(years,batch_size):
 
 if 0:
     dataloader, _, _ = load("2007_2012",1)
+    image_num = 0
     for data in dataloader:
+        image_num += 1
         img,targets = data
         img,targets = img.asnumpy()[0], targets.asnumpy()[0]
         img = np.uint8(img * 255)
@@ -338,8 +340,9 @@ if 0:
             if cls < 0:
                 continue 
             cv2.rectangle(img,(x0,y0),(x1,y1),(255,255,0), 2)
-        cv2.imshow("vis",img)
-        cv2.waitKey(-2000)
+        cv2.imwrite("../debug/{}.jpg".format(image_num), img)
+        #cv2.imshow("vis",img)
+        #cv2.waitKey(-2000)
     
     
 
