@@ -320,8 +320,15 @@ def ssd_calc_loss_slow(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_mask
     
     return (cls + bbox).sum()
 
-
+import gluoncv as gcv
 def ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox2target, bbox_masks):
+    loss_func = gcv.loss.SSDMultiBoxLoss()
+
+    return loss_func(cls_preds, bbox_preds, cls_labels, bbox2target)
+
+    #corner2center = gcv.nn.bbox.BBoxCornerToCenter(split=False)
+
+
     CLSLoss_func = gluon.loss.SoftmaxCrossEntropyLoss(from_logits = True)
     BBOXLoss_func = gluon.loss.HuberLoss()
 
@@ -424,6 +431,7 @@ def predict_ssd(net,X):
     return output[0, idx]  
 
 from tqdm import tqdm
+
 def test_ssd(net, valid_iter, ctx):
     start = time.time()
     loss_cls_hist, loss_bbox_hist = [], []
@@ -452,6 +460,7 @@ import gluoncv as gcv
 
 from tools import ssd as ssdtool
 from tqdm import tqdm
+
 def test_ssd_custom(net, valid_iter, ctx):
     mAP = gcv.utils.metrics.voc_detection.VOC07MApMetric(iou_thresh=0.5, class_names=('aeroplane', 'bicycle', 'bird',
                          'boat', 'bottle', 'bus', 'car', 'cat', 'chair','cow', 'diningtable', 'dog', 'horse',
@@ -464,14 +473,15 @@ def test_ssd_custom(net, valid_iter, ctx):
     for batch in tqdm(valid_iter):
         X = batch[0].as_in_context(ctx)
         Y = batch[1].as_in_context(ctx)
-        anchors, cls_preds, bbox_preds = net(X)
-        cls_labels, bbox2target, bbox_masks = AssignTargetFor(anchors, cls_preds, bbox_preds, Y)
-        l, l_cls, l_bbox = ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox2target,
+        anchors, cls_preds, bbox2target_preds = net(X)
+        cls_labels, bbox2target, bbox_masks = AssignTargetFor(anchors, cls_preds, bbox2target_preds, Y)
+
+        l, l_cls, l_bbox = ssd_calc_loss_custom(cls_preds, cls_labels, bbox2target_preds, bbox2target,
                                                 bbox_masks)
-        loss_hist.append( l.asnumpy()[0] / X.shape[0] )
-        loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
-        loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
-        ids, scores, bboxes = Predict(anchors.as_in_context(mx.cpu()), cls_preds.as_in_context(mx.cpu()), bbox2target.as_in_context(mx.cpu()))
+        loss_hist.append( nd.concatenate(l).mean().asnumpy()[0] )
+        loss_bbox_hist.append(  nd.concatenate(l_bbox).mean().asnumpy()[0] )
+        loss_cls_hist.append(  nd.concatenate(l_cls).mean().asnumpy()[0] )
+        ids, scores, bboxes = Predict(anchors.as_in_context(mx.cpu()), cls_preds.as_in_context(mx.cpu()), bbox2target_preds.as_in_context(mx.cpu()))
         gt_bboxes = nd.slice_axis(batch[1],axis=-1, begin=1,end=None)
         gt_lables = nd.slice_axis(batch[1],axis=-1, begin=0,end=1)
         mAP.update(pred_bboxes=bboxes, pred_labels=ids,pred_scores=scores,gt_bboxes=gt_bboxes, gt_labels = gt_lables)
@@ -490,7 +500,7 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
     logger.info("===================START TRAINING====================")
     start = time.time()
     AssignTargetFor = ssdtool.AssginTarget()
-    test_ssd_custom(net, valid_iter, ctx)
+   # test_ssd_custom(net, valid_iter, ctx)
 
 
     last_map = 0
@@ -511,12 +521,14 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
                 # 根据类别和偏移量的预测和标注值计算损失函数
                 l,l_cls, l_bbox = ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox_labels,
                               bbox_masks)
-            l.backward()
-            trainer.step(batch_size)
+            #nd.concatenate(l).backward()
+            autograd.backward(l)
+            trainer.step(1)
             nd.waitall()
-            loss_hist.append( l.asnumpy()[0] / batch_size )
-            loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
-            loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
+            loss_hist.append(nd.concatenate(l).mean().asnumpy()[0])
+            loss_bbox_hist.append(nd.concatenate(l_bbox).mean().asnumpy()[0])
+            loss_cls_hist.append(nd.concatenate(l_cls).mean().asnumpy()[0])
+
 
         if (epoch + 1)%1 == 0:
             loss = np.asarray(loss_hist).mean()
