@@ -73,7 +73,7 @@ class AssginTarget(gluon.Block):
         """
         :param anchors: (1, num-of-anchor, 4), anchors[0,0,:] = cx,cy,w,h
         :param pred_classes: (batch-size, num-of-anchor, num-of-classes), including background
-        :param pred_bboxes: (batch-size, num-of-anchor * 4)
+        :param pred_bboxes: (batch-size, num-of-anchor * 4) ------------------useless
         :param groundtruth: (batch-size, max-object-of-one-image, 5), groundtruth[0,0,:] = (cls,x0,y0,x1,y1),
                             (x0,y0,x1,y1) normalized by image size
         :return:

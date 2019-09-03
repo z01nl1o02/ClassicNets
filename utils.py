@@ -321,7 +321,7 @@ def ssd_calc_loss_slow(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_mask
     return (cls + bbox).sum()
 
 
-def ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
+def ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox2target, bbox_masks):
     CLSLoss_func = gluon.loss.SoftmaxCrossEntropyLoss(from_logits = True)
     BBOXLoss_func = gluon.loss.HuberLoss()
 
@@ -335,8 +335,8 @@ def ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_ma
     cls_labels_mask = nd.where(cls_labels >= 0, cls_labels, nd.zeros_like(cls_labels))
     loss_cls = CLSLoss_func(cls_preds, cls_labels_mask) * anchor_num
 
-    bbox_preds = nd.reshape_like(bbox_preds, bbox_labels) * bbox_masks
-    loss_bbox = BBOXLoss_func(bbox_preds, bbox_labels) * anchor_num
+    bbox_preds = nd.reshape_like(bbox_preds, bbox2target) * bbox_masks
+    loss_bbox = BBOXLoss_func(bbox_preds, bbox2target) * anchor_num
 
     loss_cls = (loss_cls / valid_anchor_num).sum()
     loss_bbox = (loss_bbox / valid_anchor_num).sum()
@@ -465,13 +465,13 @@ def test_ssd_custom(net, valid_iter, ctx):
         X = batch[0].as_in_context(ctx)
         Y = batch[1].as_in_context(ctx)
         anchors, cls_preds, bbox_preds = net(X)
-        cls_labels, bbox_labels, bbox_masks = AssignTargetFor(anchors, cls_preds, bbox_preds, Y)
-        l, l_cls, l_bbox = ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox_labels,
+        cls_labels, bbox2target, bbox_masks = AssignTargetFor(anchors, cls_preds, bbox_preds, Y)
+        l, l_cls, l_bbox = ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox2target,
                                                 bbox_masks)
         loss_hist.append( l.asnumpy()[0] / X.shape[0] )
         loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
         loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
-        ids, scores, bboxes = Predict(anchors.as_in_context(mx.cpu()), cls_preds.as_in_context(mx.cpu()), bbox_preds.as_in_context(mx.cpu()))
+        ids, scores, bboxes = Predict(anchors.as_in_context(mx.cpu()), cls_preds.as_in_context(mx.cpu()), bbox2target.as_in_context(mx.cpu()))
         gt_bboxes = nd.slice_axis(batch[1],axis=-1, begin=1,end=None)
         gt_lables = nd.slice_axis(batch[1],axis=-1, begin=0,end=1)
         mAP.update(pred_bboxes=bboxes, pred_labels=ids,pred_scores=scores,gt_bboxes=gt_bboxes, gt_labels = gt_lables)
