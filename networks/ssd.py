@@ -117,7 +117,11 @@ from gluoncv.model_zoo.ssd.target import SSDTargetGenerator
 def ssd_forward_one(Y, size, ratio, cls_predictor, bbox_predictor):
    # Y = blk(X) #提取特征
     #anchors = contrib.ndarray.MultiBoxPrior(Y, sizes=size, ratios=ratio,steps=(1,1),offsets=(0.5,0.5)) #获得anchor
-    anchors = contrib.ndarray.MultiBoxPrior(Y, sizes=size, ratios=ratio) #获得anchor
+    anchors = contrib.ndarray.MultiBoxPrior(Y, sizes=size, ratios=ratio) #获得anchor  (x0,y0,x1,y1)
+    #for row in range(anchors[0].shape[0]):
+    #    x0,y0,x1,y1 = anchors[0,row].asnumpy().tolist()
+    #    w,h = x1 - x0, y1 - y0
+    #    print('xx size={} ratio = {}'.format(w*h, w/h))
     cls_preds = cls_predictor(Y) #预测类别 （这不是上面定义的函数，而是其具体实现，即一个卷积层）
     bbox_preds = bbox_predictor(Y) #预测边界框 （这不是上面定义的函数，而是其具体实现，即一个卷积层）
     return (anchors, cls_preds, bbox_preds)
