@@ -62,8 +62,8 @@ def bbox_predictor(num_anchors):
 def flatten_pred(pred):
     return pred.transpose((0, 2, 3, 1)).flatten()
 
-def concat_preds(preds):
-    return nd.concat(*[flatten_pred(p) for p in preds], dim=1)    
+def concat_preds(F,preds):
+    return F.concat(*[flatten_pred(p) for p in preds], dim=1)    
 
 class BackboneResnet34(nn.Block):
     def __init__(self):
@@ -117,7 +117,8 @@ from gluoncv.model_zoo.ssd.target import SSDTargetGenerator
 def ssd_forward_one(Y, size, ratio, cls_predictor, bbox_predictor):
    # Y = blk(X) #提取特征
     #anchors = contrib.ndarray.MultiBoxPrior(Y, sizes=size, ratios=ratio,steps=(1,1),offsets=(0.5,0.5)) #获得anchor
-    anchors = contrib.ndarray.MultiBoxPrior(Y, sizes=size, ratios=ratio) #获得anchor  (x0,y0,x1,y1)
+    #anchors = contrib.ndarray.MultiBoxPrior(Y, sizes=size, ratios=ratio) #获得anchor  (x0,y0,x1,y1)
+    anchors = contrib.sym.MultiBoxPrior(Y, sizes=size, ratios=ratio) #获得anchor  (x0,y0,x1,y1)
     #for row in range(anchors[0].shape[0]):
     #    x0,y0,x1,y1 = anchors[0,row].asnumpy().tolist()
     #    w,h = x1 - x0, y1 - y0
@@ -128,7 +129,7 @@ def ssd_forward_one(Y, size, ratio, cls_predictor, bbox_predictor):
 
 def get_vgg16_300():
     pretrained = vgg16_atrous_300(pretrained=True)
-    body = gluon.nn.Sequential()
+    body = gluon.nn.HybridSequential()
     with body.name_scope():
         body.add(pretrained)
     return body
@@ -219,7 +220,7 @@ class SSD_CUSTOM(nn.Block):
 #############################################################################
 
 
-class SSD(nn.Block):
+class SSD(nn.HybridBlock):
     def __init__(self, num_classes, anchor_sizes=None, anchor_ratios=None, backbone=None, **kwargs):
         super(SSD, self).__init__(**kwargs)
         self.num_classes = num_classes
@@ -239,7 +240,7 @@ class SSD(nn.Block):
         for size, ratio in zip(self.anchor_sizes, self.anchor_ratios):
             num_anchors.append( len(size) + len(ratio) - 1 )
 
-        self.stage_0, self.stage_1, self.stage_2, self.stage_3, self.stage_4, self.stage_5 = nn.Sequential(prefix="decode_0"), nn.Sequential(), nn.Sequential(), nn.Sequential(), nn.Sequential(), nn.Sequential()
+        self.stage_0, self.stage_1, self.stage_2, self.stage_3, self.stage_4, self.stage_5 = nn.HybridSequential(prefix="decode_0"), nn.HybridSequential(), nn.HybridSequential(), nn.HybridSequential(), nn.HybridSequential(), nn.HybridSequential()
 
 
         backbone = get_vgg16_300()
@@ -271,7 +272,7 @@ class SSD(nn.Block):
 
         return
 
-    def forward(self, X):
+    def hybrid_forward(self, F, X):
         anchors, cls_preds, bbox_preds = [None] * 6, [None] * 6, [None] * 6
         # print(X.shape)
         Xs = self.backbone(X)
@@ -300,8 +301,8 @@ class SSD(nn.Block):
                                                                  self.stage_5[1])
         # reshape函数中的0表示保持批量大小不变
         # print(X.shape)
-        return (nd.concat(*anchors, dim=1), concat_preds(cls_preds).reshape((0, -1, self.num_classes + 1)),
-                concat_preds(bbox_preds))
+        return (F.concat(*anchors, dim=1), concat_preds(F,cls_preds).reshape((0, -1, self.num_classes + 1)),
+                concat_preds(F,bbox_preds))
 
 
 

@@ -12,7 +12,7 @@ if __name__=="__main__":
 
     ctx = mx.gpu(0)
     batch_size = 32//2
-    num_epochs = 500
+    num_epochs = 200
     base_lr = 0.001
     wd = 0.0004
     momentum = 0.9
@@ -28,7 +28,7 @@ if __name__=="__main__":
         os.makedirs(output_folder)
 
 
-    train_iter,test_iter, classes = detect_voc.load("2007",batch_size)
+    train_iter,test_iter, classes = detect_voc.load("2007_2012",batch_size)
 
     number_classes = len(classes)
 
@@ -37,7 +37,8 @@ if __name__=="__main__":
     if os.path.exists(pretrained):
         net.load_parameters(pretrained)
         print('finetune based on ',pretrained)
-
+    net.hybridize(static_alloc = True, static_shape=True)
+    #net.hybridize()
     net.collect_params().reset_ctx(ctx)
 
 
