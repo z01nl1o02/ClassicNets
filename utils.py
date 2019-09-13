@@ -420,15 +420,15 @@ def ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks):
     bbox_score = ((bbox_labels - bbox_preds) * bbox_masks).asnumpy()
     bbox_score = np.abs(bbox_score).mean()
     return bbox_score
-  
+ 
+
 def predict_ssd(net,X):
-    anchors, cls_preds, bbox_preds = net(X)
-    cls_probs = cls_preds.softmax().transpose((0, 2, 1))
-    output = contrib.nd.MultiBoxDetection(cls_probs, bbox_preds, anchors,nms_topk = -1, force_suppress=True)
-    idx = [i for i, row in enumerate(output[0]) if row[0].asscalar() != -1]
-    if len(idx) < 1:
-        return mx.nd.zeros((1,output.shape[-1])) - 1
-    return output[0, idx]  
+    Predict = ssdtool.Prediction(["{}".format(x) for x in range(20)])
+    anchors, cls_preds, bbox2target_preds = net(X)
+    ids, scores, bboxes = Predict(anchors.as_in_context(mx.cpu()), cls_preds.as_in_context(mx.cpu()), bbox2target_preds.as_in_context(mx.cpu()))
+
+    return nd.concat(ids,scores,bboxes,dim=-1)
+
 
 from tqdm import tqdm
 
