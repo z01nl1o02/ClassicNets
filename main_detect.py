@@ -4,7 +4,7 @@ from mxnet.gluon import Trainer
 from mxnet import lr_scheduler,nd
 from datasets import detect_voc
 from networks import ssd
-from utils import train_ssd, train_ssd_custom,predict_ssd
+from utils import train_ssd_custom,predict_ssd
 from tools import lr_schs
 import os,pdb,cv2
 
