@@ -1,11 +1,10 @@
 #coding=utf-8
-from mxnet import contrib, image, nd,gluon,autograd, init
-from mxnet.gluon import loss as gloss, nn
+from mxnet import contrib, nd,gluon,autograd
+from mxnet.gluon import  nn
 import mxnet as mx
-import numpy as np
 from mxnet.gluon.model_zoo import vision
 from gluoncv.model_zoo import vgg16_atrous_300
-from gluoncv import model_zoo
+
 
 
 
@@ -355,10 +354,10 @@ class SSD(nn.HybridBlock):
         anchors = F.concat(*anchors, dim=1)
         cls_preds = F.reshape( concat_preds(F,cls_preds), (0, -1, self.num_classes + 1))
         bbox_pred = concat_preds(F,bbox_pred)
-        if autograd.is_training():
+        if autograd.is_training(): #for hybridBlock, must call hybridize() to make this take effect!!
             return anchors, cls_preds, bbox_pred
         return self.postprocess( anchors, cls_preds, bbox_pred )
-        #return anchors, cls_preds, bbox_pred
+        
 
 
 if 0:

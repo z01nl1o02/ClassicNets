@@ -317,9 +317,9 @@ class DETECT_VOC(gluon.data.Dataset):
 def load(years,batch_size):
     trainset = DETECT_VOC("trainval",years,True)
     testset = DETECT_VOC("test",years,False)
-    print("train: ",len(trainset))
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=4)
-    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=4)
+    print("train: ",len(trainset), ' test: ',len(testset))
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=1)
+    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=1)
     return train_iter, test_iter, trainset._classes
 
 

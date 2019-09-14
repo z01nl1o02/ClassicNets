@@ -372,17 +372,22 @@ def test_ssd_custom(net, valid_iter, ctx):
     start = time.time()
     id_list, score_list, bbox_list = [], [],[]
     gtbbox_list, gtid_list = [],[]
-    for batch in valid_iter:
+    net.hybridize(static_alloc=True, static_shape=True)
+    for k, batch in enumerate(valid_iter):
         X = batch[0].as_in_context(ctx)
         Y = batch[1].as_in_context(ctx)
+
         ids, scores, bboxes = net(X)
         gt_bboxes = nd.slice_axis(Y,axis=-1, begin=1,end=None)
         gt_ids = nd.slice_axis(Y,axis=-1, begin=0,end=1)
+
         id_list.append(ids)
         score_list.append(scores)
         bbox_list.append(bboxes)
         gtid_list.append(gt_ids)
         gtbbox_list.append(gt_bboxes)
+
+        
     nd.waitall()
     print('ending testing')
     mAP.update(pred_bboxes=bbox_list, pred_labels=id_list,pred_scores=score_list,gt_bboxes=gtbbox_list, gt_labels = gtid_list)
@@ -396,9 +401,11 @@ def test_ssd_custom(net, valid_iter, ctx):
 def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
     logger.info("===================START TRAINING====================")
     start = time.time()
+    batch_start = start
     AssignTargetFor = ssdtool.AssginTarget()
-    test_ssd_custom(net, valid_iter, ctx)
-
+    #test_ssd_custom(net, valid_iter, ctx)
+     
+    log_interval = 100
 
     last_map = 0
     for epoch in range(num_epochs):
@@ -406,25 +413,31 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
         loss_cls_hist, loss_bbox_hist = [], []
         loss_hist = []
         trainer.set_learning_rate(lr_sch(epoch))
-        for batch in train_iter:
+        net.hybridize(static_alloc=True, static_shape=True)
+        for batch_idx, batch in enumerate(train_iter):
             X = batch[0].as_in_context(ctx)
             Y = batch[1].as_in_context(ctx)
             with autograd.record():
-                # 生成多尺度的锚框，为每个锚框预测类别和偏移量
                 anchors, cls_preds, bbox_preds = net(X)
                 cls_labels, bbox_labels, bbox_masks = AssignTargetFor(anchors, cls_preds, bbox_preds, Y)
-               # bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
-                #    anchors, Y, cls_preds.transpose((0, 2, 1)), negative_mining_ratio = 3.0)
-                # 根据类别和偏移量的预测和标注值计算损失函数
                 l,l_cls, l_bbox = ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox_labels,
                               bbox_masks)
-            #nd.concatenate(l).backward()
             autograd.backward(l)
             trainer.step(1)
             nd.waitall()
             loss_hist.append(nd.concatenate(l).mean().asnumpy()[0])
             loss_bbox_hist.append(nd.concatenate(l_bbox).mean().asnumpy()[0])
             loss_cls_hist.append(nd.concatenate(l_cls).mean().asnumpy()[0])
+
+            if not (batch_idx + 1) % log_interval:
+                loss = np.asarray(loss_hist).mean()
+                loss_bbox = np.mean(loss_bbox_hist)
+                loss_cls = np.mean(loss_cls_hist)
+
+                logger.info('epoch %2d, batch %d, class loss %.5e, bbox loss %.5e, loss %.5e, lr %.5e time %.1f sec' % (
+                    epoch, batch_idx, loss_cls,loss_bbox, loss, trainer.learning_rate, batch_size / (time.time() - batch_start) ))    
+                
+                batch_start = time.time()
 
 
         if (epoch + 1)%1 == 0:
@@ -435,7 +448,7 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
                 epoch + 1, loss_cls,loss_bbox, loss, trainer.learning_rate, time.time() - start))
             start = time.time() #restart
 
-        if (epoch)%10 == 0:
+        if (epoch + 1)%10 == 0:
             mAP = test_ssd_custom(net,valid_iter,ctx)
             if mAP > last_map:
                 net.save_parameters("{}_epoch{}_map{}.params".format(save_prefix,epoch,mAP))
