@@ -302,52 +302,13 @@ def train_net(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs,
 ##ssd
 
 
-def ssd_calc_loss_slow(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
-    cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
-    bbox_loss = gluon.loss.L1Loss()
-    #print(cls_preds.shape, cls_labels.shape)
-
-    batch_size,anchor_size,cls_num = cls_preds.shape
-    cls_preds_ = nd.reshape(cls_preds, (-1,cls_preds.shape[-1]))
-    cls_labels_ = nd.reshape(cls_labels, (-1,1))    
-    cls_mask = (cls_labels_[:,0] >= 0).reshape( cls_labels_.shape  )
-
-
-    cls = cls_loss(cls_preds_, cls_labels_,cls_mask)
-    bbox = bbox_loss(bbox_preds * bbox_masks, bbox_labels * bbox_masks)
-    
-    cls = nd.reshape(cls,(len(bbox),-1)).mean(axis=-1)
-    
-    return (cls + bbox).sum()
-
 import gluoncv as gcv
 def ssd_calc_loss_custom(cls_preds, cls_labels, bbox_preds, bbox2target, bbox_masks):
     loss_func = gcv.loss.SSDMultiBoxLoss()
 
     return loss_func(cls_preds, bbox_preds, cls_labels, bbox2target)
 
-    #corner2center = gcv.nn.bbox.BBoxCornerToCenter(split=False)
-
-
-    CLSLoss_func = gluon.loss.SoftmaxCrossEntropyLoss(from_logits = True)
-    BBOXLoss_func = gluon.loss.HuberLoss()
-
-    valid_anchor_num = (cls_labels > 0).sum(axis=-1)
-    #batch_size = cls_preds.shape[0]
-    anchor_num = cls_preds.shape[1]
-
-    cls_preds = nd.log_softmax(cls_preds,axis=-1)
-    temp = nd.repeat(cls_labels.reshape((0,0,1)),axis=-1, repeats=cls_preds.shape[-1])
-    cls_preds = nd.where(temp > 0, cls_preds, nd.zeros_like(cls_preds)) #only fg used for loss, all others set to 0
-    cls_labels_mask = nd.where(cls_labels >= 0, cls_labels, nd.zeros_like(cls_labels))
-    loss_cls = CLSLoss_func(cls_preds, cls_labels_mask) * anchor_num
-
-    bbox_preds = nd.reshape_like(bbox_preds, bbox2target) * bbox_masks
-    loss_bbox = BBOXLoss_func(bbox_preds, bbox2target) * anchor_num
-
-    loss_cls = (loss_cls / valid_anchor_num).sum()
-    loss_bbox = (loss_bbox / valid_anchor_num).sum()
-    return loss_cls + loss_bbox, loss_cls, loss_bbox
+    
 
 
 def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
@@ -386,40 +347,9 @@ def ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
 
 
 
-#def calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels, bbox_masks):
-#    cls_loss = gluon.loss.SoftmaxCrossEntropyLoss()
-#    bbox_loss = gluon.loss.L1Loss()
-    #if cls_labels.max().asscalar() > 20:
-    #	print(cls_labels.max().asscalar(), cls_labels.min().asscalar())
-    #pdb.set_trace()
-    #inds = nd.where( cls_labels < 0 )[0]
-    #output = np.delete(cls_labels, inds, axis=0)
-    #pdb.set_trace()
-#    cls = cls_loss(cls_preds, cls_labels)
-#    bbox = bbox_loss(bbox_preds * bbox_masks, bbox_labels * bbox_masks)
-#    return cls + bbox
 
-def ssd_cls_eval(cls_preds, cls_labels): 
-    batch_size,anchor_size,cls_num = cls_preds.shape
-    cls_preds_ = nd.reshape(cls_preds, (-1,cls_preds.shape[-1]))
-    cls_labels_ = nd.reshape(cls_labels, (-1,1))    
-    cls_mask = (cls_labels_[:,0] >= 0).reshape( cls_labels_.shape  )
-    cls_pred_labels = cls_preds_.argmax(axis=-1).reshape( (batch_size * anchor_size, 1)  )
-    #pdb.set_trace()
-    cls = (cls_pred_labels == cls_labels_) * cls_mask
-    cls = nd.reshape( cls, (batch_size,-1) ).mean().asnumpy()[0]
-    return cls
 
-#def cls_eval(cls_preds, cls_labels):
-#    # 由于类别预测结果放在最后一维，argmax需要指定最后一维
-#    return (cls_preds.argmax(axis=-1) == cls_labels).sum().asscalar()
 
-def ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks):
-   # print (bbox_labels*bbox_masks)
-  #  print (bbox_preds*bbox_masks).sum()
-    bbox_score = ((bbox_labels - bbox_preds) * bbox_masks).asnumpy()
-    bbox_score = np.abs(bbox_score).mean()
-    return bbox_score
  
 
 def predict_ssd(net,X):
@@ -430,32 +360,6 @@ def predict_ssd(net,X):
     return nd.concat(ids,scores,bboxes,dim=-1)
 
 
-from tqdm import tqdm
-
-def test_ssd(net, valid_iter, ctx):
-    start = time.time()
-    loss_cls_hist, loss_bbox_hist = [], []
-    loss_hist = []
-    for batch in valid_iter:
-        X = batch[0].as_in_context(ctx)
-        Y = batch[1].as_in_context(ctx)        
-        anchors, cls_preds, bbox_preds = net(X)
-        # 为每个锚框标注类别和偏移量
-        #pdb.set_trace()
-        bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
-            anchors, Y, cls_preds.transpose((0, 2, 1)))
-        # 根据类别和偏移量的预测和标注值计算损失函数
-        l,l_cls, l_bbox = ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
-                      bbox_masks)
-        loss_hist.append( l.asnumpy()[0] / X.shape[0] )
-        loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
-        loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
-    loss = np.asarray(loss_hist).mean()
-    loss_bbox = np.mean(loss_bbox_hist)
-    loss_cls = np.mean(loss_cls_hist)
-    logger.info('\t test class loss %.5e, bbox loss %.5e, loss %.5e, time %.1f sec' % ( 
-        loss_cls, loss_bbox, loss, time.time() - start))
-    return
 import gluoncv as gcv
 
 from tools import ssd as ssdtool
@@ -544,99 +448,6 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
                 net.save_parameters("{}_epoch{}_map{}.params".format(save_prefix,epoch,mAP))
                 last_map = mAP
 
-
-def train_ssd(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix):
-    train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_epochs, lr_sch, save_prefix)
-    return
-    logger.info("===================START TRAINING====================")
-    start = time.time()
-    for epoch in range(num_epochs):
-        #acc_hist, mae_hist = [],[]
-        loss_cls_hist, loss_bbox_hist = [], []
-        loss_hist = []
-        trainer.set_learning_rate(lr_sch(epoch))
-        for batch in train_iter:        
-            X = batch[0].as_in_context(ctx)
-            Y = batch[1].as_in_context(ctx)
-            with autograd.record():
-                # 生成多尺度的锚框，为每个锚框预测类别和偏移量
-                anchors, cls_preds, bbox_preds = net(X)
-                # 为每个锚框标注类别和偏移量
-                bbox_labels, bbox_masks, cls_labels = contrib.nd.MultiBoxTarget(
-                    anchors, Y, cls_preds.transpose((0, 2, 1)), negative_mining_ratio = 3.0)
-                if 0:
-                    img = np.transpose( X[0].asnumpy(), (1,2,0) )
-                    img = np.uint8(img * 255)
-                    #img = cv2.resize(img,(750,750))
-                    bboxes_offset = np.reshape( bbox_preds[0].asnumpy(), (-1,4) )
-                    masks = np.reshape( bbox_masks[0].asnumpy(), (-1,4)  )
-                    bboxes_offset = bboxes_offset * masks
-                    anchors_reshape = np.reshape( anchors[0].asnumpy(),(-1,4)  )
-                    H,W,C = img.shape
-                    cls_reshape = np.reshape( cls_preds[0].asnumpy(), (-1,1)  )
-                    tx,ty = 0,0
-                    for y in Y[0]:
-                        c,x0,y0,x1,y1 = (y.asnumpy()  * np.asarray([1,W,H,W,H])).astype(np.int32)
-                        if c < 1:
-                            continue
-                        tx,ty = (x0+x1)//2, (y0+y1)//2
-                        img = cv2.rectangle(img, (x0, y0), (x1, y1), (0, 0, 255), 3)
-                    min_dist = 1000000
-                    pt = [0,0]
-                    total = 0
-                    pts = []
-                    for offset,anchor,cls in zip(bboxes_offset,anchors_reshape, cls_reshape):
-                        #if cls == 0:
-                        #    continue
-                        x0,y0,x1,y1 = anchor
-                        px,py,pw,ph = offset
-                        px,py,pw,ph = 0,0,0,0
-                        aw,ah = x1 - x0, y1 - y0
-                        ax,ay = (x1+x0)/2, (y1 + y0) /2
-                        ox,oy = ax + aw * px, ay + ah * py
-                        ow,oh = np.exp(pw) * aw / 2, np.exp(ph) * ah/2
-                        bbox = [ox - ow, oy - oh, ox + ow, oy + oh]
-                        x0,y0,x1,y1 = (bbox  * np.asarray([W,H,W,H])).astype(np.int32)
-                        ox,oy = ox * W, oy * H
-                        dx,dy = np.absolute(ox - tx),np.absolute(oy - ty)
-                        if dx + dy < min_dist:
-                            min_dist = dx + dy
-                            pt = [ox,oy,x0,x1,y0,y1]
-                        if np.absolute(int(ox) - tx) > 15 or np.absolute(int(oy) - ty) > 15:
-                            continue
-                        #if x1 == x0 and y0 == y1:
-                        #    continue
-                        pts.append( "%d,%d"%(int(ox),int(oy)))
-                        total += 1
-                        img = cv2.rectangle(img,(x0,y0),(x1,y1),(255,0,0),1)
-                    cv2.imwrite("img.jpg",img)
-                    pts = set(pts)
-
-
-                # 根据类别和偏移量的预测和标注值计算损失函数
-                l,l_cls, l_bbox = ssd_calc_loss(cls_preds, cls_labels, bbox_preds, bbox_labels,
-                              bbox_masks)
-            l.backward()
-            trainer.step(batch_size)
-            nd.waitall()
-            loss_hist.append( l.asnumpy()[0] / batch_size )
-            loss_bbox_hist.append(  l_bbox.mean().asnumpy()[0] )
-            loss_cls_hist.append(  l_cls.mean().asnumpy()[0] )
-            #acc_hist.append( ssd_cls_eval(cls_preds, cls_labels) )
-            #mae_hist.append( ssd_bbox_eval(bbox_preds, bbox_labels, bbox_masks) )
-            #pdb.set_trace()
-
-        if (epoch + 1)%2 == 0:
-            loss = np.asarray(loss_hist).mean()
-            loss_bbox = np.mean(loss_bbox_hist)
-            loss_cls = np.mean(loss_cls_hist)
-            logger.info('epoch %2d, class loss %.5e, bbox loss %.5e, loss %.5e, lr %.5e time %.1f sec' % (
-                epoch + 1, loss_cls,loss_bbox, loss, trainer.learning_rate, time.time() - start))
-            start = time.time() #restart    
-
-        if (epoch + 1) % 50 == 0:
-            test_ssd(net,valid_iter,ctx)
-            net.save_parameters("{}_epoch{}.params".format(save_prefix,epoch))   
 
 ###########################################################
 ##rnn
