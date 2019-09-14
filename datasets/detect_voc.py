@@ -260,8 +260,8 @@ class DETECT_VOC(gluon.data.Dataset):
         r = random.random()
         if r < p:
             src,bbox = self.ExpandImage(src,bbox)
-        #elif r < p:
-        #    src,bbox = self.BatchSample(src,bbox)
+        elif r < p:
+            src,bbox = self.BatchSample(src,bbox)
                
         if random.random() < p:
             src = self.Shuffle_channle(src)
