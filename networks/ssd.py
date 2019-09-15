@@ -218,6 +218,7 @@ class SSD_CUSTOM(nn.Block):
 #############################################################################
 #############################################################################
 import gluoncv as gcv
+import pdb
 class Postpreocess(gluon.HybridBlock):
     def __init__(self,num_classes,nms_thresh=0.45, nms_topk=400, post_nms=100):
         super(Postpreocess,self).__init__()
@@ -256,6 +257,10 @@ class Postpreocess(gluon.HybridBlock):
             per_result = F.concat(*[cls_id, score, bboxes], dim=-1)
             results.append(per_result)
         result = F.concat(*results, dim=1)
+        #https: // github.com / apache / incubator - mxnet / issues / 14057
+        #bbox_nms() become slow as inputing elements increasing
+
+        
         if self.nms_thresh > 0 and self.nms_thresh < 1:
             result = F.contrib.box_nms(
                 result, overlap_thresh=self.nms_thresh, topk=self.nms_topk, valid_thresh=0.01,
@@ -357,7 +362,7 @@ class SSD(nn.HybridBlock):
         if autograd.is_training(): #for hybridBlock, must call hybridize() to make this take effect!!
             return anchors, cls_preds, bbox_pred
         return self.postprocess( anchors, cls_preds, bbox_pred )
-        
+
 
 
 if 0:
