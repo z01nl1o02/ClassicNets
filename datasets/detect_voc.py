@@ -260,8 +260,9 @@ class DETECT_VOC(gluon.data.Dataset):
         r = random.random()
         if r < p:
             src,bbox = self.ExpandImage(src,bbox)
-        elif r < p:
-            src,bbox = self.BatchSample(src,bbox)
+
+        #if r < p:
+        #    src,bbox = self.BatchSample(src,bbox)
                
         if random.random() < p:
             src = self.Shuffle_channle(src)
@@ -310,16 +311,16 @@ class DETECT_VOC(gluon.data.Dataset):
         img = np.float32(img) / 255
         #print(img.dtype, targets.dtype)
         return img,targets
-        
-        
+
+
         
         
 def load(years,batch_size):
     trainset = DETECT_VOC("trainval",years,True)
     testset = DETECT_VOC("test",years,False)
     print("train: ",len(trainset), ' test: ',len(testset))
-    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=1)
-    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=1)
+    train_iter = gluon.data.DataLoader(trainset,batch_size,shuffle=True,last_batch="rollover",num_workers=4)
+    test_iter = gluon.data.DataLoader(testset,batch_size,shuffle=False,last_batch="rollover",num_workers=4)
     return train_iter, test_iter, trainset._classes
 
 
