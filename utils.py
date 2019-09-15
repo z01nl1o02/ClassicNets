@@ -369,7 +369,8 @@ def test_ssd_custom(net, valid_iter, ctx):
     mAP = gcv.utils.metrics.voc_detection.VOC07MApMetric(iou_thresh=0.5, class_names=('aeroplane', 'bicycle', 'bird',
                          'boat', 'bottle', 'bus', 'car', 'cat', 'chair','cow', 'diningtable', 'dog', 'horse',
                           'motorbike', 'person', 'pottedplant','sheep', 'sofa', 'train', 'tvmonitor'))
-    start = time.time()
+    batch_start = time.time()
+    
     id_list, score_list, bbox_list = [], [],[]
     gtbbox_list, gtid_list = [],[]
     net.hybridize(static_alloc=True, static_shape=True)
@@ -386,12 +387,12 @@ def test_ssd_custom(net, valid_iter, ctx):
         bbox_list.append(bboxes)
         gtid_list.append(gt_ids)
         gtbbox_list.append(gt_bboxes)
-
-        
-    nd.waitall()
-    print('ending testing')
-    mAP.update(pred_bboxes=bbox_list, pred_labels=id_list,pred_scores=score_list,gt_bboxes=gtbbox_list, gt_labels = gtid_list)
-    logger.info('test time %.1f sec' % ( time.time() - start))
+        mAP.update(pred_bboxes=bbox_list, pred_labels=id_list,pred_scores=score_list,gt_bboxes=gtbbox_list, gt_labels = gtid_list)
+        id_list, score_list, bbox_list = [], [],[]
+        gtbbox_list, gtid_list = [],[]
+        logger.info("test batch {} speeds {}".format(k, X.shape[0] / (time.time() - batch_start)  ))
+        batch_start = time.time()
+    
     names, values = mAP.get()
     for name,value in zip(names,values):
         logger.info("{} {}".format(name, value))
@@ -403,15 +404,15 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
     start = time.time()
     batch_start = start
     AssignTargetFor = ssdtool.AssginTarget()
-    #test_ssd_custom(net, valid_iter, ctx)
+    test_ssd_custom(net, valid_iter, ctx)
      
     log_interval = 100
 
     last_map = 0
     for epoch in range(num_epochs):
         #acc_hist, mae_hist = [],[]
-        loss_cls_hist, loss_bbox_hist = [], []
-        loss_hist = []
+        #loss_cls_hist, loss_bbox_hist = [], []
+        #loss_hist = []
         trainer.set_learning_rate(lr_sch(epoch))
         net.hybridize(static_alloc=True, static_shape=True)
         for batch_idx, batch in enumerate(train_iter):
@@ -424,20 +425,20 @@ def train_ssd_custom(net, train_iter, valid_iter, batch_size, trainer, ctx, num_
                               bbox_masks)
             autograd.backward(l)
             trainer.step(1)
-            nd.waitall()
-            loss_hist.append(nd.concatenate(l).mean().asnumpy()[0])
-            loss_bbox_hist.append(nd.concatenate(l_bbox).mean().asnumpy()[0])
-            loss_cls_hist.append(nd.concatenate(l_cls).mean().asnumpy()[0])
+            #nd.waitall()
+            #loss_hist.append(nd.concatenate(l).mean().asnumpy()[0])
+            #loss_bbox_hist.append(nd.concatenate(l_bbox).mean().asnumpy()[0])
+            #loss_cls_hist.append(nd.concatenate(l_cls).mean().asnumpy()[0])
 
             if not (batch_idx + 1) % log_interval:
                 loss = np.asarray(loss_hist).mean()
                 loss_bbox = np.mean(loss_bbox_hist)
                 loss_cls = np.mean(loss_cls_hist)
 
-                logger.info('epoch %2d, batch %d, class loss %.5e, bbox loss %.5e, loss %.5e, lr %.5e time %.1f sec' % (
+                logger.info('epoch %2d, batch %d, class loss %.5e, bbox loss %.5e, loss %.5e, lr %.5e speed %.1f it/sec' % (
                     epoch, batch_idx, loss_cls,loss_bbox, loss, trainer.learning_rate, batch_size / (time.time() - batch_start) ))    
                 
-                batch_start = time.time()
+            batch_start = time.time()
 
 
         if (epoch + 1)%1 == 0:
