@@ -1,5 +1,6 @@
 import mxnet as mx
 from mxnet import gluon
+import gluoncv
 import numpy as np
 import cv2
 
@@ -86,15 +87,41 @@ class FCN(gluon.Block):
 
         return out
 
+
+class FCN_WITH_VGG(gluon.nn.HybridBlock):
+    def __init__(self,num_class,**kwargs):
+        super(FCN_WITH_VGG,self).__init__(**kwargs)
+        pretrained = gluon.model_zoo.vision.vgg11(pretrained=True)
+        if 0:
+            data = mx.sym.var("data")
+            internals = pretrained(data).get_internals()
+            print(internals)
+        self.feature_extractor = gluoncv.nn.feature.FeatureExpander(network=pretrained, outputs=['pool4_fwd'], \
+                                                                    num_filters=[])
+        self.feature_extractor.collect_params().setattr("lr_mult", 0.01)
+        self.tail = gluon.nn.HybridSequential()
+        self.tail.add(
+            gluon.nn.Conv2D(num_class,kernel_size=1,strides=1,padding=0,dilation=1,weight_initializer=mx.init.Xavier()),
+            gluon.nn.Activation("sigmoid")
+        )
+        self.tail.collect_params().initialize()
+        return
+    def hybrid_forward(self, F, x, *args, **kwargs):
+        y = self.feature_extractor(x)
+        y = self.tail(y)
+        return y
+
 def get_net(num_class):
-    return FCN(num_class)
+    return FCN_WITH_VGG(num_class)
 
 if 0:
     ctx = mx.gpu()
-    fcn = FCN(2)
+    fcn = get_net(4)
+    #fcn.initialize()
+    fcn.hybridize(static_shape = True, static_alloc = True)
     fcn.collect_params().reset_ctx(ctx)
-    x = mx.nd.random.uniform(0,1,(2,3,64,64),ctx=ctx)
+    x = mx.nd.random.uniform(0,1,(2,3,64*2,64*2),ctx=ctx)
     print('input: ',x.shape)
     y = fcn(x)
-    print('output: ',y.shape)
+    print('output: ',y.shape, ' y range:', y.min(),",",y.max())
 
